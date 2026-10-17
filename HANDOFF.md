@@ -38,7 +38,7 @@ intent-crafter/
 │   │   ├── index.css           # Vanilla CSS design system tokens
 │   │   └── App.tsx             # Root workspace container
 │   ├── tests/
-│   │   ├── logic.test.ts       # 6 invariant unit tests
+│   │   ├── logic.test.ts       # 7 invariant unit tests
 │   │   └── voice.test.ts       # 6 live voice unit tests
 │   └── package.json
 ├── claude-dual/                # Copied prior art: dual-agent audio floor controller
@@ -70,7 +70,7 @@ npm run dev
 ---
 
 ## 4. Current State & Verification
-- **Test Suite**: 12/12 unit tests passing (Node.js test runner).
+- **Test Suite**: 13/13 unit tests passing (Node.js test runner).
 - **Linter**: `oxlint` reports 0 errors and 0 warnings.
 - **Production Build**: `tsc -b && vite build` succeeds with zero errors.
 - **Dev Server**: Running at `http://localhost:5173`.

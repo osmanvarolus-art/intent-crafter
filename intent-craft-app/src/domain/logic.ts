@@ -23,8 +23,8 @@ const mapCard = (ws: Workspace, id: string, fn: (c: Card) => Card): Workspace =>
 });
 
 /**
- * New source text. Cards whose exact quote no longer matches are marked
- * needs_review. Approval is kept so the history of the decision is not erased.
+ * New source text. A card whose exact quote moved (an edit elsewhere) follows it; a card whose
+ * quote is gone or now ambiguous is marked needs_review. Approval is kept so the history of the decision is not erased.
  */
 export function applySourceEdit(ws: Workspace, text: string, now: string): Workspace {
   if (text === ws.sourceText) return ws;
@@ -34,6 +34,11 @@ export function applySourceEdit(ws: Workspace, text: string, now: string): Works
     sourceRevision: ws.sourceRevision + 1,
     cards: ws.cards.map((c) => {
       if (!c.source || c.freshness === 'needs_review' || quoteIsValid(text, c.source)) return c;
+      // An edit elsewhere only shifted the offsets: the exact quote is still there, once. Follow it.
+      const start = text.indexOf(c.source.quote);
+      if (start >= 0 && text.indexOf(c.source.quote, start + 1) < 0) {
+        return { ...c, source: { ...c.source, start, end: start + c.source.quote.length, revision: ws.sourceRevision + 1 } };
+      }
       return log({ ...c, freshness: 'needs_review', staleReason: 'source_changed' }, now, 'source changed');
     }),
   };

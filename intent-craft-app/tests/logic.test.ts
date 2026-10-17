@@ -54,6 +54,20 @@ test('source edit marks linked card needs_review without erasing approval', () =
   assert.equal(ws.cards.find((x) => x.id === 'c3')!.source, undefined); // quote gone -> link dropped, not faked
 });
 
+test('edit earlier in the text moves later quotes instead of marking them stale', () => {
+  let ws = confirmCard(analysed(), 'c4', NOW);
+  const later = ws.cards.find((x) => x.id === 'c4')!.source!;
+  ws = applySourceEdit(ws, TEXT.replace('konuşarak anlatmak', 'sesli olarak anlatmak'), NOW);
+  const c = ws.cards.find((x) => x.id === 'c4')!;
+  assert.equal(c.freshness, 'current');
+  assert.ok(c.source!.start > later.start);
+  assert.ok(quoteIsValid(ws.sourceText, c.source!));
+  assert.equal(ws.cards.find((x) => x.id === 'c1')!.freshness, 'needs_review'); // its own words changed
+  // a quote that now appears twice is ambiguous: review, never a guess
+  ws = applySourceEdit(ws, ws.sourceText + ' ' + c.source!.quote, NOW);
+  assert.equal(ws.cards.find((x) => x.id === 'c4')!.freshness, 'current'); // offset still exact, untouched
+});
+
 test('task package: deterministic, excludes unconfirmed options, goes stale on edit', () => {
   let ws = confirmCard(analysed(), 'c3', NOW);
   ws = answerQuestion(ws, 'c4', 'Before every file change', NOW);

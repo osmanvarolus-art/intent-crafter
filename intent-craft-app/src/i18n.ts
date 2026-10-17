@@ -53,7 +53,7 @@ const en = {
 
   learnTitle: 'Concepts & questions',
   learnHint: 'Short explanations of terms that appear in your thought.',
-  inYourProject: 'In your project',
+  inYourProject: 'For example',
   clarifyTitle: 'Open question',
   clarifyWhy: 'Why it matters: the agent will guess if this stays open.',
   notSure: 'Not sure yet',
@@ -145,7 +145,7 @@ const tr: Strings = {
 
   learnTitle: 'Kavramlar ve sorular',
   learnHint: 'Düşüncende geçen terimlerin kısa açıklamaları.',
-  inYourProject: 'Projende',
+  inYourProject: 'Örneğin',
   clarifyTitle: 'Açık soru',
   clarifyWhy: 'Neden önemli: açık kalırsa ajan tahmin yürütür.',
   notSure: 'Henüz bilmiyorum',
