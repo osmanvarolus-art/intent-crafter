@@ -50,8 +50,11 @@ npm run build
   - `tests/`:
     - `logic.test.ts`: Domain rule invariant tests.
     - `voice.test.ts`: Live voice, duplicate prevention, and cursor preservation tests.
-- `claude-dual/`: Reference implementation for two-agent spoken dialogue on PipeWire.
-- `voice-vox/`: Reference local spoken assistant with VoxCPM2 TTS.
+- `assets/`: original HTML prototypes and design images.
+- Reference projects (not copied here): two-agent spoken dialogue `~/Archive/20261004-dev-inventory/claude-dual`, local VoxCPM2 speech assistant `~/Archive/20261002-dev-inventory/voice-vox`.
+
+## Running copy
+`intentcraft.service` (user systemd) builds and serves the app at http://127.0.0.1:4173; Hyprland opens it on the right-hand monitor. After a change: `systemctl --user restart intentcraft`.
 
 ## Guidelines for Claude Code
 - Keep interface text in English.
