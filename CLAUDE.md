@@ -38,16 +38,17 @@ npm run build
   - `src/domain/logic.ts`: Pure business rules (staleness checks, readiness checks, deterministic markdown).
   - `src/domain/voice.ts`: Cursor-safe insertion of dictated text.
   - `src/domain/voiceSession.ts`: Dictation without browser speech services: phrase detection from microphone loudness, ordered transcription.
-  - `src/providers/demoProvider.ts`: Heuristic rule-based sentence/clause extraction (Unicode-aware).
-  - `src/providers/glossary.ts`: Living glossary definitions and contextual relevance filtering.
+  - `src/providers/modelProvider.ts`: Points written by a local model (`server/extract.ts`, `/api/extract`), tied back to the user's exact words (`locate`); asked questions stay questions, privacy/security rules become constraints.
+  - `src/providers/demoProvider.ts`: Rule-based sentence split, used only when no model answers (the header then says so).
   - `src/state/useWorkspace.ts`: Reducer-based undo/redo history + debounced `localStorage` persistence.
-  - `src/components/`:
-    - `Header.tsx`: Brand, honest demo banner, save indicator, undo/redo, language toggle.
-    - `ThoughtPanel.tsx`: Thought editor, cursor management, and live source quotation viewer.
-    - `LiveVoiceControls.tsx`: Microphone controls (Start, Pause/Resume, Stop, route disclosure, interim preview).
-    - `Board.tsx` & `CardView.tsx`: Structured intention cards with status pills and actions.
-    - `LearnPanel.tsx`: One open clarifying question at a time and contextual living concepts.
-    - `TaskDrawer.tsx`: Readiness checklist, deterministic task package exporter, agent evidence verifier.
+  - `src/components/` (layout: four steps across the top, your text on the left, the current step on the right):
+    - `Header.tsx`: Brand, New idea (archives the current one), save indicator, undo/redo, language toggle.
+    - `Steps.tsx`: Tell · Check · Questions · Task, with what is done and what is left.
+    - `ThoughtPanel.tsx`: Voice + text; clicking a point selects its exact words in the text.
+    - `LiveVoiceControls.tsx`: Dictation (Start, Pause/Resume, Stop) through the local STT service.
+    - `CheckStep.tsx`: One line per point: kind, the point once, the user's quote, Keep / Drop / Edit, Keep all.
+    - `QuestionsStep.tsx`: Agent pre-check and every open question with its own answer box or "let the agent decide".
+    - `TaskStep.tsx`: What is still missing (with a link to the step), the package, the agent's report.
   - `tests/`:
     - `logic.test.ts`: Domain rules, demo provider, pre-check cards, damaged-data handling.
     - `voice.test.ts`, `voiceSession.test.ts`: Text insertion, phrase detection, speaking order, pause/resume, errors.
@@ -61,7 +62,7 @@ npm run build
 - `/api/precheck` (Vite middleware, `intent-craft-app/server/precheck.ts`) asks a coding agent what it would otherwise guess: local models via llama-swap (127.0.0.1:8081, `gemma4-12b`, then `bonsai-27b`), the Claude CLI last. Override with `INTENTCRAFT_LLM_MODELS` / `INTENTCRAFT_LLM_URL`.
 
 ## Purpose metric
-Success is measured by how much a coding agent still has to guess, not by how the cards look: give the prepared package to an agent and count its open questions (2026-10-17: raw idea 10 guesses / 5 of 10, old package 11 / 4 of 10, package with voice + agent pre-check 9 / 6 of 10, with the two architecture-level unknowns resolved).
+Success is measured by how much a coding agent still has to guess, not by how the cards look: give the prepared package to an agent and ask for its open questions and an actionability score (2026-10-17, same Turkish idea: raw idea 5/10, rule-split package 4/10, + voice and agent pre-check 6/10, + model-written points and the four-step layout 7/10; the remaining questions are implementation details).
 
 ## Guidelines for Claude Code
 - Keep interface text in English.

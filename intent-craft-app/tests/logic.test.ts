@@ -179,3 +179,13 @@ test('demo provider: short follow-up questions join the question before them', (
   ]);
   assert.ok(cards.every((c) => quoteIsValid(t, c.source!)));
 });
+
+test('pre-check: a question already asked in other words is not added again', () => {
+  let ws = { ...emptyWorkspace(), sourceText: 'x', sourceRevision: 1 };
+  ws = addPrecheck(ws, [{ q: 'Çeviriler hangi formatta kaydedilmelidir; TXT mi yoksa MD mi?' }], 'm', id, NOW);
+  ws = addPrecheck(ws, [
+    { q: 'Çevirilerin kaydedileceği dosya formatı olarak TXT mi yoksa Markdown (MD) formatını mı tercih edersiniz?' },
+    { q: 'Claude ile hangi platform üzerinden konuşuyorsunuz?' },
+  ], 'm', id, NOW);
+  assert.deepEqual(ws.cards.map((c) => c.title.slice(0, 20)), ['Çeviriler hangi form', 'Claude ile hangi pla']);
+});
