@@ -73,7 +73,8 @@ async function askLocal(model: string, prompt: string, signal: AbortSignal): Pro
 
 function askClaude(prompt: string, signal: AbortSignal): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn('claude', ['-p', '--model', 'sonnet', '--setting-sources', '', '--strict-mcp-config'], { signal });
+    // No tools: the pre-check only reads the draft and answers with text.
+    const child = spawn('claude', ['-p', '--model', 'sonnet', '--tools', '', '--setting-sources', '', '--strict-mcp-config'], { signal });
     let out = '';
     child.stdout.on('data', (d) => (out += d));
     child.on('error', reject);
