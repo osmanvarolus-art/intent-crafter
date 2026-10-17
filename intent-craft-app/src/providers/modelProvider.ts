@@ -60,8 +60,8 @@ export function cardsFromItems(text: string, items: ModelItem[], revision: numbe
     const asked = source && text.slice(source.end).match(/^\s*\?/) ? { ...source, end: source.end + text.slice(source.end).indexOf('?') + 1 } : source;
     const linked = asked && asked !== source ? { ...asked, quote: text.slice(asked.start, asked.end) } : source;
     const type = kind(it, linked);
-    // A question the model rewrote into a statement is shown in the user's own words.
-    const wording = type === 'question' && it.type !== 'question' && linked ? linked.quote : it.text;
+    // A question the user asked is shown in the user's own words (models tend to rewrite it as a statement).
+    const wording = type === 'question' && linked?.quote.trim().endsWith('?') ? linked.quote : it.text;
     return {
       id: makeId(),
       type,

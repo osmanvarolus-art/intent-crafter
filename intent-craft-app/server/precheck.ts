@@ -22,6 +22,7 @@ export function buildPrompt(draft: string, lang: 'tr' | 'en'): string {
     `Only questions whose answer changes what you build or how; at most ${MAX_QUESTIONS}; most important first.`,
     'Do not ask about anything the task already answers. Do not ask about the user\'s hardware or tools you can look up yourself.',
     `Write each question in plain words a non-programmer understands, in ${language}, with a one-sentence reason.`,
+    lang === 'tr' ? 'Address the user informally with "sen" (never "siz"), like the rest of the app.' : 'Address the user as "you", plainly.',
     'Reply with JSON only: {"questions":[{"q":"...","why":"..."}]}',
     '',
     'TASK:',
