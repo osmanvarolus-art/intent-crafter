@@ -43,7 +43,7 @@ intent-crafter/
 │   └── package.json
 ├── claude-dual/                # Copied prior art: dual-agent audio floor controller
 ├── voice-vox/                  # Copied prior art: VoxCPM2 local speech assistant
-└── prototypes & visual assets  # Original HTML references & designs
+└── assets/                     # Original HTML prototypes & Gemini design images
 ```
 
 ---
