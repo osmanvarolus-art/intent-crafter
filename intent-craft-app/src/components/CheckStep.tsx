@@ -74,7 +74,7 @@ export function CheckStep({ cards, selectedId, actions, onNext, split, onStartOv
   selectedId?: string;
   actions: PointActions;
   onNext: () => void;
-  split: { running: boolean; engine?: string; error?: string };
+  split: { running: boolean; engine?: string; error?: string; live?: boolean };
   /** The old decisions no longer match the text: start a new idea with the current text. */
   onStartOver: () => void;
 }) {
@@ -101,7 +101,7 @@ export function CheckStep({ cards, selectedId, actions, onNext, split, onStartOv
           <div><button id="start-over" className="btn primary" onClick={onStartOver}>{t.startOverWithText}</button></div>
         </div>
       )}
-      {split.running && <p className="small muted" role="status">{t.splitting}</p>}
+      {split.running && <p className="small muted live-note" role="status">{split.live ? t.splittingLive : t.splitting}</p>}
       <ul className="points">
         {points.map((c) => (
           // key includes revision so the edit field resets after a saved edit

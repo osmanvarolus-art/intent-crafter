@@ -296,3 +296,4 @@ input:focus-visible, textarea:focus-visible { outline: none; border-color: var(-
 textarea, input { caret-color: var(--accent); }
 html { scrollbar-color: var(--border-strong) transparent; }
 .question form .answer-input { flex: 1 1 260px; }
+.live-note::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: var(--accent); animation: pulse 1s infinite; vertical-align: middle; }

@@ -14,8 +14,12 @@ export interface Item {
 const TYPES: ItemType[] = ['need', 'constraint', 'option', 'idea', 'question'];
 const MAX_ITEMS = 14;
 
-export function buildExtractPrompt(thought: string, lang: 'tr' | 'en'): string {
+export function buildExtractPrompt(thought: string, lang: 'tr' | 'en', known: string[] = []): string {
   const language = lang === 'tr' ? 'Turkish' : 'English';
+  // While the user is still speaking only the new part is sent, with what was already captured.
+  const continuing = known.length
+    ? ['', 'This text CONTINUES an idea whose points are already captured (below). Return only NEW points it adds; no second overall goal; never repeat a captured point.', 'ALREADY CAPTURED:', ...known.map((k) => `- ${k}`)]
+    : [];
   return [
     'A non-programmer described what they want built. Turn it into a clear project definition for a coding agent.',
     'Return the points one by one:',
@@ -28,6 +32,8 @@ export function buildExtractPrompt(thought: string, lang: 'tr' | 'en'): string {
     'One point per requirement: split sentences that hold two requirements, merge repeats. Keep everything the user said; add nothing they did not say.',
     '"quote" must be copied character for character from the thought (a part of one sentence is fine).',
     `At most ${MAX_ITEMS} points. Reply with JSON only: {"items":[{"type":"need","text":"...","quote":"..."}]}`,
+    '',
+    ...continuing,
     '',
     'THOUGHT:',
     thought,
@@ -45,7 +51,9 @@ export function parseItems(text: string): Item[] | null {
   return items.length ? items : null;
 }
 
-export async function runExtract(thought: string, lang: 'tr' | 'en', ask?: Asker, engines = ENGINES): Promise<{ engine: string; items: Item[] }> {
-  const { engine, value } = await askChain(buildExtractPrompt(thought, lang), parseItems, ask, engines);
+export async function runExtract(thought: string, lang: 'tr' | 'en', ask?: Asker, engines = ENGINES, known: string[] = []): Promise<{ engine: string; items: Item[] }> {
+  // A continuation may legitimately add nothing: an empty list is an answer then.
+  const parse = (text: string) => parseItems(text) ?? (known.length && /"items"\s*:\s*\[\s*\]/.test(text) ? [] : null);
+  const { engine, value } = await askChain(buildExtractPrompt(thought, lang, known), parse, ask, engines);
   return { engine, items: value };
 }

@@ -10,6 +10,7 @@ target_fingerprint: "sha256:9dba502c65ab740c3cc77b0f2cf89598c35f0412e09857b86fa1
 target_path: /home/omarchi-os/Projects/intent-crafter/intent-craft-app/src/App.tsx
 timestamp: 2026-10-17T19-38-33Z
 slug: intent-craft-app-src-app-tsx
+closed: true
 ---
 Method: dual-agent (A: design review · B: detector + browser)
 

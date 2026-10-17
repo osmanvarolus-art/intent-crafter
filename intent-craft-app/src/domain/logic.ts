@@ -105,6 +105,17 @@ export function mergeSuggestions(ws: Workspace, incoming: Card[]): Workspace {
   return { ...ws, cards: [...kept, ...incoming.filter((c) => !keptQuotes.has(c.source?.quote) && !keptTitles.has(c.title.trim().toLowerCase()))] };
 }
 
+/**
+ * Live points while the user is still speaking: everything already on the board stays where it is,
+ * new points are added unless they repeat one (same quote or same text).
+ */
+export function addSuggestions(ws: Workspace, incoming: Card[]): Workspace {
+  const quotes = new Set(ws.cards.map((c) => c.source?.quote).filter(Boolean));
+  const titles = new Set(ws.cards.map((c) => c.title.trim().toLowerCase()));
+  const fresh = incoming.filter((c) => !quotes.has(c.source?.quote) && !titles.has(c.title.trim().toLowerCase()));
+  return fresh.length ? { ...ws, cards: [...ws.cards, ...fresh] } : ws;
+}
+
 export const isDecision = (c: Card) => c.approval === 'confirmed';
 
 export function readiness(ws: Workspace): ReadinessCheck[] {

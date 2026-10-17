@@ -101,3 +101,9 @@ npm run dev
 - New idea archives the current workspace (last 20 in `intentcraft.archive.v1`; Undo also restores it); if every decision stops matching the text, the Check step offers to start a new idea with the current text. Verified: nothing from the first idea reached the second.
 - Pre-check drops questions that repeat one already asked in other words.
 - Measured: agent actionability 7/10 (was 4/10 before today's work). Tests 15 -> 35.
+
+## 2026-10-17 night: organising while you speak or type
+
+- Voice: after each transcribed phrase only the new stretch of text is sent to `/api/extract` with the points already captured (`known`); new points are appended (`addSuggestions`), nothing on the board moves. One request at a time; speech that arrives meanwhile goes in the next. Stop runs one full pass that tidies everything; kept points never change.
+- Typing: a 2.5 s pause runs the same full pass; no button needed ("Split into points" stays for a manual run).
+- Measured with the 33-second Turkish recording: each point appeared 0.5-1.5 s after its sentence was transcribed, all 6 before the speaker finished; typing gave points 5.3 s after the last key.

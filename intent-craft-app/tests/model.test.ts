@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { buildExtractPrompt, parseItems, runExtract } from '../server/extract.ts';
 import { cardsFromItems, locate } from '../src/providers/modelProvider.ts';
 import { classify } from '../src/providers/demoProvider.ts';
-import { confirmCard, emptyWorkspace, mergeSuggestions, quoteIsValid } from '../src/domain/logic.ts';
+import { addSuggestions, confirmCard, emptyWorkspace, mergeSuggestions, quoteIsValid } from '../src/domain/logic.ts';
 
 const TEXT = 'Çeviri anlık olmalı ama internet yoksa da çalışabilir mi? Hangi formatta kaydetsin? TXT mi? MD mi?';
 
@@ -70,4 +70,24 @@ test('cardsFromItems: a question the user asked keeps the user\'s words even whe
   const text = 'Hangi formatta kaydetsin? TXT mi? MD mi?';
   const [c] = cardsFromItems(text, [{ type: 'question', text: 'Kayıt formatı henüz belirlenmemiştir.', quote: 'Hangi formatta kaydetsin? TXT mi? MD mi?' }], 1, () => 'q', 'NOW', 'm');
   assert.equal(c.title, 'Hangi formatta kaydetsin? TXT mi? MD mi?');
+});
+
+test('live points: a continuation sends what is captured and may add nothing; points already on the board stay', async () => {
+  const prompt = buildExtractPrompt('Sonra PDF de olsun.', 'tr', ['Not uygulaması', 'Çevrimdışı çalışmalı']);
+  assert.match(prompt, /CONTINUES[\s\S]*- Not uygulaması[\s\S]*THOUGHT:\nSonra PDF de olsun\.$/);
+  const r = await runExtract('x', 'tr', async () => '{"items": []}', ['m'], ['known']);
+  assert.deepEqual(r.items, []);
+  await assert.rejects(runExtract('x', 'tr', async () => '{"items": []}', ['m']), /no usable answer/); // a first pass must find something
+
+  const text = 'Bir not uygulaması istiyorum. Çevrimdışı çalışmalı. Sonra PDF de olsun.';
+  let n = 0;
+  const mk = () => `c${++n}`;
+  let ws = addSuggestions({ ...emptyWorkspace(), sourceText: text, sourceRevision: 1 },
+    cardsFromItems(text, [{ type: 'idea', text: 'Not uygulaması', quote: 'Bir not uygulaması istiyorum.' }], 1, mk, 'NOW', 'm'));
+  ws = confirmCard(ws, 'c1', 'NOW');
+  ws = addSuggestions(ws, cardsFromItems(text, [
+    { type: 'idea', text: 'Not uygulaması', quote: 'Bir not uygulaması istiyorum.' }, // repeat: ignored
+    { type: 'need', text: 'PDF olarak dışa aktarma.', quote: 'Sonra PDF de olsun.' },
+  ], 1, mk, 'NOW', 'm'));
+  assert.deepEqual(ws.cards.map((c) => [c.id, c.approval]), [['c1', 'confirmed'], ['c3', 'suggested']]);
 });

@@ -57,7 +57,8 @@ function localServices(): Plugin {
   }
   const lang = (v: unknown) => (v === 'en' ? 'en' : 'tr')
   const precheck = route('/api/precheck', (b) => runPrecheck(text(b.draft, 'draft'), lang(b.lang)))
-  const extract = route('/api/extract', (b) => runExtract(text(b.text, 'thought'), lang(b.lang)))
+  const known = (v: unknown) => (Array.isArray(v) ? v.filter((k): k is string => typeof k === 'string').slice(0, 40) : [])
+  const extract = route('/api/extract', (b) => runExtract(text(b.text, 'thought'), lang(b.lang), undefined, undefined, known(b.known)))
   const install = (m: Connect.Server) => {
     m.use(sameOriginOnly)
     m.use(precheck)

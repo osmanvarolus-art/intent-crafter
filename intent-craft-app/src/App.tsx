@@ -46,7 +46,7 @@ export default function App() {
   });
   const [selectedId, setSelectedId] = useState<string>();
   const [step, setStep] = useState<Step>(() => nextStep(ws));
-  const [split, setSplit] = useState<{ running: boolean; engine?: string; error?: string }>({ running: false });
+  const [split, setSplit] = useState<{ running: boolean; engine?: string; error?: string; live?: boolean }>({ running: false });
   // The workspace as last rendered, for callbacks that fire after React has applied their own updates.
   const latestWs = useRef(ws);
   const stepTitle = useRef<HTMLHeadingElement>(null);
@@ -91,7 +91,7 @@ export default function App() {
   // Ids and timestamps are made here, outside the reducer, so a replayed commit gives the same result.
   // A language model writes the points (goal, needs, constraints, options, questions) from the user's words;
   // if it cannot be reached, simple rules split the sentences instead and the header says so.
-  const suggest = async (from: Workspace = ws) => {
+  const suggest = async (from: Workspace = ws, quiet = false) => {
     const text = from.sourceText;
     const rev = from.sourceRevision;
     if (!text.trim()) return;
@@ -117,8 +117,70 @@ export default function App() {
     commit((w) => (w.sourceRevision === rev ? rules.mergeSuggestions(w, cards) : w));
     setSplit({ running: false, engine, error });
     setSplitAt(rev);
-    // On a phone the points land below the text: bring them into view.
-    if (window.matchMedia('(max-width: 900px)').matches) stepTitle.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    live.current.processed = text.length;
+    // On a phone the points land below the text: bring them into view (not while the user is still typing).
+    if (!quiet && window.matchMedia('(max-width: 900px)').matches) stepTitle.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  // Live points while speaking: each new stretch of speech is read on its own, with what was already
+  // captured, and its points are added without touching the board. One request at a time; speech that
+  // arrives meanwhile goes in the next one. Stop runs a full pass that tidies everything.
+  const live = useRef({ processed: 0, running: false, again: false });
+  const liveSplit = async () => {
+    const L = live.current;
+    if (L.running) {
+      L.again = true;
+      return;
+    }
+    const from = latestWs.current;
+    const text = from.sourceText;
+    if (text.slice(L.processed).trim().length < 12) return;
+    L.running = true;
+    L.again = false;
+    setStep('check');
+    setSplit((s) => ({ ...s, running: true, live: true }));
+    try {
+      const known = from.cards.filter((c) => c.approval !== 'rejected').map((c) => c.title);
+      const res = await fetch('/api/extract', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: text.slice(L.processed), lang, known }),
+      });
+      const body = (await res.json()) as { engine?: string; items?: ModelItem[]; error?: string };
+      if (!res.ok || !body.items) throw new Error(body.error ?? `HTTP ${res.status}`);
+      const items = body.items;
+      const ids = items.map(() => newId());
+      const at = now();
+      const engine = body.engine ?? 'model';
+      // Quotes are located in the text as it is when the commit lands (more speech may have arrived).
+      commit((w) => {
+        let i = 0;
+        return rules.addSuggestions(w, cardsFromItems(w.sourceText, items, w.sourceRevision, () => ids[i++], at, engine));
+      });
+      L.processed = text.length;
+      setSplit({ running: false, engine, live: true });
+    } catch {
+      setSplit((s) => ({ ...s, running: false })); // best effort: the full pass after Stop covers it
+    } finally {
+      L.running = false;
+      if (L.again) void liveSplit();
+    }
+  };
+
+  // After dictation stops: drop any queued live pass, let React apply the last phrase, then read it all.
+  const voiceFinished = () => {
+    live.current.again = false;
+    setTimeout(() => void suggest(latestWs.current), 0);
+  };
+
+  // Typing: a 2.5 s pause tidies the points too, no button needed.
+  const typingPause = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const afterTyping = () => {
+    clearTimeout(typingPause.current);
+    typingPause.current = setTimeout(() => {
+      const w = latestWs.current;
+      if (w.sourceText.trim().length > 20) void suggest(w, true);
+    }, 2500);
   };
 
   const newIdea = (keepText = false) => {
@@ -128,6 +190,8 @@ export default function App() {
     setSelectedId(undefined);
     setPrecheck({ running: false });
     setSplit({ running: false });
+    live.current = { processed: 0, running: false, again: false };
+    clearTimeout(typingPause.current);
     if (keepText) void suggest(fresh);
     else setStep('tell');
   };
@@ -193,7 +257,10 @@ export default function App() {
             text={ws.sourceText}
             highlight={selected?.source}
             highlightValid={!!selected?.source && rules.quoteIsValid(ws.sourceText, selected.source)}
-            onChange={(text) => commit((w) => rules.applySourceEdit(w, text, now()), 'source')}
+            onChange={(text) => {
+              commit((w) => rules.applySourceEdit(w, text, now()), 'source');
+              afterTyping();
+            }}
             onVoiceText={(chunk, cursor, moveCursor) => {
               const at = now();
               commit((w) => {
@@ -201,10 +268,10 @@ export default function App() {
                 moveCursor(nextCursor);
                 return rules.applySourceEdit(w, text, at);
               });
+              setTimeout(() => void liveSplit(), 0); // after React applied the phrase
             }}
             onAnalyze={() => void suggest()}
-            // After dictation stops: let React apply the last phrase, then split the text it produced.
-            onVoiceFinished={() => setTimeout(() => void suggest(latestWs.current), 0)}
+            onVoiceFinished={voiceFinished}
             splitting={split.running}
             analyzePrimary={!points.length || ws.sourceRevision !== splitAt}
           />
