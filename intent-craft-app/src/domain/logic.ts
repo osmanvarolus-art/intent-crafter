@@ -99,8 +99,10 @@ export const answerQuestion = (ws: Workspace, id: string, answer: string, now: s
  */
 export function mergeSuggestions(ws: Workspace, incoming: Card[]): Workspace {
   const kept = ws.cards.filter((c) => c.origin === 'user' || c.approval !== 'suggested' || c.revision > 1 || c.answer);
-  const keptQuotes = new Set(kept.map((c) => c.source?.quote));
-  return { ...ws, cards: [...kept, ...incoming.filter((c) => !keptQuotes.has(c.source?.quote))] };
+  const keptQuotes = new Set(kept.map((c) => c.source?.quote).filter(Boolean));
+  const keptTitles = new Set(kept.map((c) => c.title.trim().toLowerCase()));
+  // A point already decided (same words, or the same rewritten text from a model) is not suggested again.
+  return { ...ws, cards: [...kept, ...incoming.filter((c) => !keptQuotes.has(c.source?.quote) && !keptTitles.has(c.title.trim().toLowerCase()))] };
 }
 
 export const isDecision = (c: Card) => c.approval === 'confirmed';
@@ -241,6 +243,18 @@ export const isWorkspace = (v: unknown): v is Workspace => {
   return !!w && w.cards.length === (v as Workspace).cards.length && w.evidence.length === (v as Workspace).evidence.length;
 };
 
+/** Word stems (first 5 letters of each word of 3+ letters): "formatta" and "formatı" count as the same word. */
+const words = (s: string) => new Set((s.toLocaleLowerCase().match(/\p{L}{3,}|\p{N}+/gu) ?? []).map((w) => w.slice(0, 5)));
+
+/** Two questions are the same when most of the shorter one's words are in the other (and it has a few words). */
+function sameQuestion(a: Set<string>, b: Set<string>): boolean {
+  const [small, big] = a.size <= b.size ? [a, b] : [b, a];
+  if (!small.size) return true;
+  let shared = 0;
+  for (const w of small) if (big.has(w)) shared++;
+  return small.size < 3 ? shared === small.size : shared / small.size >= 0.6;
+}
+
 /**
  * Questions from the coding agent's pre-check become question cards (origin ai, no source quote).
  * A question already on the board (same wording) is not added twice.
@@ -252,12 +266,13 @@ export function addPrecheck(
   makeId: () => string,
   now: string,
 ): Workspace {
-  const seen = new Set(ws.cards.map((c) => c.title.trim().toLowerCase()));
+  const seen = ws.cards.filter((c) => c.type === 'question').map((c) => words(c.title));
   const cards: Card[] = [];
   for (const { q, why } of questions) {
     const title = q.trim();
-    if (!title || seen.has(title.toLowerCase())) continue;
-    seen.add(title.toLowerCase());
+    const w = words(title);
+    if (!title || seen.some((s) => sameQuestion(s, w))) continue;
+    seen.push(w);
     cards.push({
       id: makeId(), type: 'question', title, body: (why ?? '').trim(), origin: 'ai', approval: 'suggested',
       freshness: 'current', revision: 1, history: [{ at: now, action: 'asked by the coding agent pre-check' }],

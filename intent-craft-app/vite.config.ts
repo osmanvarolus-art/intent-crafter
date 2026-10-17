@@ -1,6 +1,7 @@
 import react from '@vitejs/plugin-react'
 import type { Connect, Plugin } from 'vite'
 import { defineConfig } from 'vite'
+import { runExtract } from './server/extract.ts'
 import { runPrecheck } from './server/precheck.ts'
 
 const STT = process.env.INTENTCRAFT_STT_URL ?? 'http://127.0.0.1:8797'
@@ -21,10 +22,11 @@ const sameOriginOnly: Connect.NextHandleFunction = (req, res, next) => {
   next()
 }
 
-// Local helpers served next to the app (dev and preview): POST /api/precheck. Speech goes to the STT service via proxy.
+// Local helpers served next to the app (dev and preview). Speech goes to the STT service via proxy.
 function localServices(): Plugin {
-  const precheck: Connect.NextHandleFunction = (req, res, next) => {
-    if (req.url !== '/api/precheck' || req.method !== 'POST') return next()
+  /** POST JSON in, JSON out; body capped while it arrives. */
+  const route = (path: string, run: (body: Record<string, unknown>) => Promise<unknown>): Connect.NextHandleFunction => (req, res, next) => {
+    if (req.url !== path || req.method !== 'POST') return next()
     res.setHeader('content-type', 'application/json; charset=utf-8')
     if (!req.headers['content-type']?.startsWith('application/json')) {
       res.statusCode = 415 // also forces a CORS preflight for any cross-origin caller without Sec-Fetch-Site
@@ -42,18 +44,24 @@ function localServices(): Plugin {
     req.on('end', async () => {
       if (res.writableEnded) return
       try {
-        const { draft, lang } = JSON.parse(body) as { draft?: unknown; lang?: unknown }
-        if (typeof draft !== 'string' || !draft.trim() || draft.length > 50_000) throw new Error('draft text required')
-        res.end(JSON.stringify(await runPrecheck(draft, lang === 'en' ? 'en' : 'tr')))
+        res.end(JSON.stringify(await run(JSON.parse(body))))
       } catch (e) {
         res.statusCode = 502
         res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }))
       }
     })
   }
+  const text = (v: unknown, name: string) => {
+    if (typeof v !== 'string' || !v.trim() || v.length > 50_000) throw new Error(`${name} text required`)
+    return v
+  }
+  const lang = (v: unknown) => (v === 'en' ? 'en' : 'tr')
+  const precheck = route('/api/precheck', (b) => runPrecheck(text(b.draft, 'draft'), lang(b.lang)))
+  const extract = route('/api/extract', (b) => runExtract(text(b.text, 'thought'), lang(b.lang)))
   const install = (m: Connect.Server) => {
     m.use(sameOriginOnly)
     m.use(precheck)
+    m.use(extract)
   }
   return {
     name: 'intentcraft-local-services',

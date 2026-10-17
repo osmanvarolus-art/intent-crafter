@@ -20,7 +20,9 @@ const RULES: Array<[CardType, RegExp]> = [
   ['question', words('mi|mı|mu|mü|misin|mısın|musun|müsün|midir|mıdır')],
   ['question', /^\s*(hangi|neden|niçin|niye|kaç)(?!\p{L})/iu],
   ['option', words('belki|olabilir|ya da|veya|maybe|perhaps|could|or')],
-  ['constraint', words('kalsın|asla|sadece|yalnızca|olmamalı|zorunda|zorunlu|never|only|must|must not|should not|required|mandatory')],
+  ['constraint', words('kalsın|asla|sadece|yalnızca|olmamalı|olmasın|zorunda|zorunlu|hariç|gizli|gizlilik|maskele|şifrele|never|only|must|must not|should not|required|mandatory|no|not|without|redact|mask|private|privacy|secret|encrypt|anonymi[sz]e')],
+  // Turkish "must not" request mood (gitmesin, görünmesin, çevrilmesin): a rule, not a wish.
+  ['constraint', suffix('m[ae]s[ıi]n|m[ae]s[ıi]nlar|m[ae]s[ıi]nler')],
   ['constraint', suffix('mamalı|memeli|mamalıdır|memelidir')],
   ['need', words('istiyorum|gerek|lazım|ihtiyaç|göstersin|want|need|should')],
   ['need', suffix('malı|meli|malıdır|melidir')],
@@ -68,7 +70,7 @@ export const demoProvider: Provider = {
     return joinQuestionTails(text, sentenceSpans(text)).map(({ start, end, quote }) => ({
       id: makeId(),
       type: classify(quote),
-      title: quote.length > 70 ? quote.slice(0, 67).trimEnd() + '…' : quote,
+      title: quote,
       body: quote,
       origin: 'ai',
       approval: 'suggested',

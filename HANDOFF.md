@@ -93,3 +93,11 @@ npm run dev
 - Robustness: damaged saved data is backed up and the readable part kept; a render crash shows a reset screen instead of a blank page; the save indicator shows real state and failed saves.
 - Speed: unchanged cards skip rendering; source edits shift quotes in one pass.
 - Measured purpose (agent guesses, lower is better): raw idea 10, old package 11, new package 9 with the two architecture unknowns answered (score 4/10 -> 6/10). Next: run the pre-check a second time after answering to close the remaining second-order questions; local models still sometimes repeat a question the user already asked.
+
+## 2026-10-17 later: four-step layout and model-written points
+
+- Layout: Tell · Check · Questions · Task across the top; your text on the left; the current step on the right. Each sentence appears once (no separate source box, no badge rows); clicking a point selects its words in your text.
+- Points come from a local model (`/api/extract`, gemma4-12b first): goal, needs, constraints, options and questions as complete sentences with corrected terms, each tied to the user's exact words. Questions the user asked stay questions; privacy/security rules are constraints; rules are only the fallback.
+- New idea archives the current workspace (last 20 in `intentcraft.archive.v1`; Undo also restores it); if every decision stops matching the text, the Check step offers to start a new idea with the current text. Verified: nothing from the first idea reached the second.
+- Pre-check drops questions that repeat one already asked in other words.
+- Measured: agent actionability 7/10 (was 4/10 before today's work). Tests 15 -> 35.

@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { SourceRef } from '../domain/types.ts';
 import { useT } from '../i18n.ts';
 import { LiveVoiceControls } from './LiveVoiceControls.tsx';
@@ -14,10 +14,10 @@ interface Props {
    */
   onVoiceText: (chunk: string, cursor: number | undefined, moveCursor: (pos: number) => void) => void;
   onAnalyze: () => void;
-  onNaturalPause: () => void;
+  onVoiceFinished: () => void;
 }
 
-export function ThoughtPanel({ text, highlight, highlightValid, onChange, onVoiceText, onAnalyze, onNaturalPause }: Props) {
+export function ThoughtPanel({ text, highlight, highlightValid, onChange, onVoiceText, onAnalyze, onVoiceFinished, splitting }: Props & { splitting: boolean }) {
   const { t } = useT();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -29,16 +29,24 @@ export function ThoughtPanel({ text, highlight, highlightValid, onChange, onVoic
     });
   };
 
+  // Clicking a point shows its exact words inside your own text (selected), not in a second copy of it.
   const hl = highlight && highlightValid ? highlight : undefined;
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el || !hl) return;
+    el.setSelectionRange(hl.start, hl.end);
+    el.blur(); // focusing again scrolls the selected words into view
+    el.focus();
+  }, [hl?.start, hl?.end]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <section className="panel" aria-labelledby="thought-h">
       <div className="panel-head">
         <h2 id="thought-h">{t.thoughtTitle}</h2>
-        <p className="muted small">{t.thoughtHint}</p>
+        <p className="muted small">{t.stepTellHint}</p>
       </div>
 
-      <LiveVoiceControls onText={handleVoice} onNaturalPause={onNaturalPause} />
+      <LiveVoiceControls onText={handleVoice} onFinished={onVoiceFinished} />
 
       <label htmlFor="thought" className="sr-only">
         {t.thoughtTitle}
@@ -50,7 +58,7 @@ export function ThoughtPanel({ text, highlight, highlightValid, onChange, onVoic
         value={text}
         placeholder={t.thoughtPlaceholder}
         onChange={(e) => onChange(e.target.value)}
-        rows={7}
+        rows={12}
       />
 
       <div className="row between">
@@ -61,31 +69,10 @@ export function ThoughtPanel({ text, highlight, highlightValid, onChange, onVoic
           id="analyze"
           className="btn primary"
           onClick={onAnalyze}
-          disabled={!text.trim()}
-          title="Analyze current thought and suggest structured cards"
+          disabled={!text.trim() || splitting}
         >
-          {t.analyze}
+          {splitting ? t.splitting : `${t.splitIdea} →`}
         </button>
-      </div>
-      <p className="muted small">{t.analyzeHint}</p>
-
-      <div className="source-view" aria-labelledby="source-h">
-        <h3 id="source-h" className="eyebrow">
-          {t.sourceTitle}
-        </h3>
-        <p className="muted small">{t.sourceHint}</p>
-        <p className="source-text">
-          {!text && <span className="muted">{t.sourceEmpty}</span>}
-          {hl ? (
-            <>
-              {text.slice(0, hl.start)}
-              <mark id="source-highlight">{text.slice(hl.start, hl.end)}</mark>
-              {text.slice(hl.end)}
-            </>
-          ) : (
-            text
-          )}
-        </p>
       </div>
     </section>
   );

@@ -1,17 +1,39 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { appendFinalTranscript } from './domain/voice.ts';
 import * as rules from './domain/logic.ts';
 import { demoProvider } from './providers/demoProvider.ts';
+import { cardsFromItems, type ModelItem } from './providers/modelProvider.ts';
 import { newId, now, useWorkspace } from './state/useWorkspace.ts';
 import { I18n, STRINGS, type Lang } from './i18n.ts';
 import { Header } from './components/Header.tsx';
 import { ThoughtPanel } from './components/ThoughtPanel.tsx';
-import { Board } from './components/Board.tsx';
-import { LearnPanel } from './components/LearnPanel.tsx';
-import { TaskDrawer } from './components/TaskDrawer.tsx';
-import type { CardActions } from './components/CardView.tsx';
+import { CheckStep, type PointActions } from './components/CheckStep.tsx';
+import { QuestionsStep } from './components/QuestionsStep.tsx';
+import { TaskStep } from './components/TaskStep.tsx';
+import { Steps, type Step, type StepStatus } from './components/Steps.tsx';
+import type { Workspace } from './domain/types.ts';
 
-const provider = demoProvider;
+/** The first step that still needs the user. */
+function nextStep(ws: Workspace): Step {
+  if (!ws.sourceText.trim() || !ws.cards.length) return 'tell';
+  if (ws.cards.some((c) => c.type !== 'question' && ((c.approval === 'suggested' && c.type !== 'option') || c.freshness === 'needs_review'))) return 'check';
+  if (!ws.precheck || ws.cards.some((c) => c.type === 'question' && !c.answer && c.approval !== 'rejected')) return 'questions';
+  return 'task';
+}
+
+const rulesProvider = demoProvider;
+const ARCHIVE = 'intentcraft.archive.v1';
+
+/** Keep the last 20 ideas aside before starting a new one (Undo also brings the last one back). */
+function archive(ws: Workspace) {
+  if (!ws.sourceText.trim() && !ws.cards.length) return;
+  try {
+    const list = JSON.parse(localStorage.getItem(ARCHIVE) ?? '[]') as unknown[];
+    localStorage.setItem(ARCHIVE, JSON.stringify([{ at: new Date().toISOString(), ws }, ...list].slice(0, 20)));
+  } catch {
+    /* storage full or blocked: Undo still has it */
+  }
+}
 const isEditable = (el: EventTarget | null) =>
   el instanceof HTMLElement && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
 
@@ -23,6 +45,13 @@ export default function App() {
     return saved && Object.hasOwn(STRINGS, saved) ? (saved as Lang) : 'en'; // unknown or corrupt value: never crash
   });
   const [selectedId, setSelectedId] = useState<string>();
+  const [step, setStep] = useState<Step>(() => nextStep(ws));
+  const [split, setSplit] = useState<{ running: boolean; engine?: string; error?: string }>({ running: false });
+  // The workspace as last rendered, for callbacks that fire after React has applied their own updates.
+  const latestWs = useRef(ws);
+  useLayoutEffect(() => {
+    latestWs.current = ws;
+  });
   const i18n = useMemo(() => ({ t: STRINGS[lang], lang }), [lang]);
 
   useEffect(() => {
@@ -42,7 +71,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [undo, redo]);
 
-  const actions: CardActions = useMemo(
+  const actions: PointActions & { answer: (id: string, a: string) => void } = useMemo(
     () => ({
       select: (id) => setSelectedId((cur) => (cur === id ? undefined : id)),
       confirm: (id) => commit((w) => rules.confirmCard(w, id, now())),
@@ -58,9 +87,44 @@ export default function App() {
   const selected = ws.cards.find((c) => c.id === selectedId);
 
   // Ids and timestamps are made here, outside the reducer, so a replayed commit gives the same result.
-  const suggest = () => {
-    const fresh = provider.extract(ws.sourceText, ws.sourceRevision, newId, now());
-    commit((w) => (w.sourceRevision === ws.sourceRevision ? rules.mergeSuggestions(w, fresh) : w));
+  // A language model writes the points (goal, needs, constraints, options, questions) from the user's words;
+  // if it cannot be reached, simple rules split the sentences instead and the header says so.
+  const suggest = async (from: Workspace = ws) => {
+    const text = from.sourceText;
+    const rev = from.sourceRevision;
+    if (!text.trim()) return;
+    setStep('check');
+    setSplit({ running: true });
+    let cards;
+    let engine = 'rules';
+    let error: string | undefined;
+    try {
+      const res = await fetch('/api/extract', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text, lang }),
+      });
+      const body = (await res.json()) as { engine?: string; items?: ModelItem[]; error?: string };
+      if (!res.ok || !body.items) throw new Error(body.error ?? `HTTP ${res.status}`);
+      engine = body.engine ?? 'model';
+      cards = cardsFromItems(text, body.items, rev, newId, now(), engine);
+    } catch (e) {
+      error = e instanceof Error ? e.message.slice(0, 160) : String(e);
+      cards = rulesProvider.extract(text, rev, newId, now());
+    }
+    commit((w) => (w.sourceRevision === rev ? rules.mergeSuggestions(w, cards) : w));
+    setSplit({ running: false, engine, error });
+  };
+
+  const newIdea = (keepText = false) => {
+    archive(ws);
+    const fresh = keepText ? { ...rules.emptyWorkspace(), sourceText: ws.sourceText, sourceRevision: ws.sourceRevision } : rules.emptyWorkspace();
+    commit(() => fresh);
+    setSelectedId(undefined);
+    setPrecheck({ running: false });
+    setSplit({ running: false });
+    if (keepText) void suggest(fresh);
+    else setStep('tell');
   };
 
   const runPrecheck = async () => {
@@ -86,11 +150,29 @@ export default function App() {
     }
   };
 
+  const goQuestions = () => {
+    setStep('questions');
+    if (!ws.precheck && ws.sourceText.trim() && !precheck.running) void runPrecheck(); // the agent reads as soon as you get here
+  };
+  const go = (s: Step) => (s === 'questions' ? goQuestions() : setStep(s));
+
+  const t = i18n.t;
+  const points = ws.cards.filter((c) => c.type !== 'question');
+  const toCheck = points.filter((c) => (c.approval === 'suggested' && c.type !== 'option') || c.freshness === 'needs_review').length;
+  const openQuestions = ws.cards.filter((c) => c.type === 'question' && !c.answer && c.approval !== 'rejected').length;
+  const status: Record<Step, StepStatus> = {
+    tell: { done: !!ws.sourceText.trim() && points.length > 0 },
+    check: { done: points.length > 0 && toCheck === 0, note: points.length ? (toCheck ? t.left(toCheck) : undefined) : undefined },
+    questions: { done: !!ws.precheck && openQuestions === 0, note: openQuestions ? t.left(openQuestions) : undefined },
+    task: { done: !!ws.pkg && rules.packageStatus(ws) === 'current' },
+  };
+
   return (
     <I18n.Provider value={i18n}>
       <div className="app">
         <Header
-          live={provider.live}
+          notice={split.engine === 'rules' ? i18n.t.demoBanner : undefined}
+          onNewIdea={() => newIdea()}
           saving={saving}
           saveFailed={saveFailed}
           canUndo={canUndo}
@@ -99,6 +181,7 @@ export default function App() {
           onRedo={redo}
           onToggleLang={() => setLang((l) => (l === 'en' ? 'tr' : 'en'))}
         />
+        <Steps current={step} status={status} onPick={go} />
         <main className="workspace">
           <ThoughtPanel
             text={ws.sourceText}
@@ -113,31 +196,41 @@ export default function App() {
                 return rules.applySourceEdit(w, text, at);
               });
             }}
-            onAnalyze={suggest}
-            onNaturalPause={() => {
-              // Runs after the latest spoken text was committed; read it from the reducer, not from this render.
-              commit((w) => (w.sourceText.trim() ? rules.mergeSuggestions(w, provider.extract(w.sourceText, w.sourceRevision, newId, now())) : w));
-            }}
+            onAnalyze={() => void suggest()}
+            // After dictation stops: let React apply the last phrase, then split the text it produced.
+            onVoiceFinished={() => setTimeout(() => void suggest(latestWs.current), 0)}
+            splitting={split.running}
           />
-          <Board cards={ws.cards} selectedId={selectedId} actions={actions} />
-          <LearnPanel
-            text={ws.sourceText}
-            cards={ws.cards}
-            onAnswer={actions.answer}
-            onSelect={actions.select}
-            onDismiss={actions.reject}
-            onPrecheck={runPrecheck}
-            precheck={precheck}
-            precheckStale={!!ws.precheck && ws.precheck.sourceRevision !== ws.sourceRevision}
-            canPrecheck={!!ws.sourceText.trim()}
-          />
+          <section className="panel step-panel" aria-labelledby="step-title">
+            <h2 id="step-title">{t.steps[step === 'tell' ? 'check' : step]}</h2>
+            {(step === 'check' || step === 'tell') && (
+              <CheckStep cards={ws.cards} selectedId={selectedId} actions={actions} onNext={goQuestions} split={split} onStartOver={() => newIdea(true)} />
+            )}
+            {step === 'questions' && (
+              <QuestionsStep
+                cards={ws.cards}
+                onAnswer={actions.answer}
+                onLeave={actions.reject}
+                onReopen={actions.reopen}
+                onSelect={actions.select}
+                onPrecheck={runPrecheck}
+                precheck={precheck}
+                precheckDone={!!ws.precheck}
+                precheckStale={!!ws.precheck && ws.precheck.sourceRevision !== ws.sourceRevision}
+                onNext={() => setStep('task')}
+              />
+            )}
+            {step === 'task' && (
+              <TaskStep
+                ws={ws}
+                onPrepare={() => commit((w) => rules.preparePackage(w, now()))}
+                onAddEvidence={(r) => commit((w) => rules.addReportedEvidence(w, r, newId))}
+                onEvidence={(id, s) => commit((w) => rules.setEvidenceStatus(w, id, s))}
+                onGo={go}
+              />
+            )}
+          </section>
         </main>
-        <TaskDrawer
-          ws={ws}
-          onPrepare={() => commit((w) => rules.preparePackage(w, now()))}
-          onAddEvidence={(r) => commit((w) => rules.addReportedEvidence(w, r, newId))}
-          onEvidence={(id, s) => commit((w) => rules.setEvidenceStatus(w, id, s))}
-        />
       </div>
     </I18n.Provider>
   );

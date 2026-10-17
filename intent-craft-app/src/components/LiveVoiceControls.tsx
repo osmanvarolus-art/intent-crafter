@@ -48,11 +48,11 @@ async function openBrowserMic(): Promise<Mic> {
 
 interface Props {
   onText: (chunk: string) => void;
-  /** After a short pause in speech and after Stop: refresh the card suggestions. */
-  onNaturalPause: () => void;
+  /** After Stop, once every phrase is written: split the thought into points. */
+  onFinished: () => void;
 }
 
-export function LiveVoiceControls({ onText, onNaturalPause }: Props) {
+export function LiveVoiceControls({ onText, onFinished }: Props) {
   const { t, lang } = useT();
   const [available, setAvailable] = useState<boolean | null>(null);
   const [state, setState] = useState<DictationState>('idle');
@@ -60,12 +60,11 @@ export function LiveVoiceControls({ onText, onNaturalPause }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   // Latest props and language, read by the long-lived session (no stale closures).
-  const latest = useRef({ onText, onNaturalPause, lang });
+  const latest = useRef({ onText, onFinished, lang });
   useLayoutEffect(() => {
-    latest.current = { onText, onNaturalPause, lang };
+    latest.current = { onText, onFinished, lang };
   });
   const sessionRef = useRef<DictationSession | null>(null);
-  const pauseTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     let alive = true;
@@ -75,7 +74,6 @@ export function LiveVoiceControls({ onText, onNaturalPause }: Props) {
       .catch(() => alive && setAvailable(false));
     return () => {
       alive = false;
-      clearTimeout(pauseTimer.current);
       void sessionRef.current?.stop();
     };
   }, []);
@@ -98,15 +96,13 @@ export function LiveVoiceControls({ onText, onNaturalPause }: Props) {
       onText: (text) => {
         setError(null);
         latest.current.onText(text);
-        clearTimeout(pauseTimer.current);
-        pauseTimer.current = setTimeout(() => latest.current.onNaturalPause(), 1500);
       },
       onState: (s, detail) => {
         setState(s);
         if (detail) setError(s === 'error' && /denied|not allowed|notfound|permission/i.test(detail) ? t.voiceMic : detail);
       },
       onPending: setPending,
-      onFinished: () => latest.current.onNaturalPause(),
+      onFinished: () => latest.current.onFinished(),
     }));
 
   const start = () => {
