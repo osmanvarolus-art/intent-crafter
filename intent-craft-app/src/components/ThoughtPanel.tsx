@@ -1,6 +1,5 @@
 import { useRef } from 'react';
 import type { SourceRef } from '../domain/types.ts';
-import { appendFinalTranscript } from '../domain/voice.ts';
 import { useT } from '../i18n.ts';
 import { LiveVoiceControls } from './LiveVoiceControls.tsx';
 
@@ -9,43 +8,25 @@ interface Props {
   highlight?: SourceRef;
   highlightValid: boolean;
   onChange: (text: string) => void;
+  /**
+   * Spoken text: inserted at the cursor while the text box has focus, otherwise appended.
+   * The parent applies it to the latest text and reports where the cursor ends up.
+   */
+  onVoiceText: (chunk: string, cursor: number | undefined, moveCursor: (pos: number) => void) => void;
   onAnalyze: () => void;
   onNaturalPause: () => void;
 }
 
-export function ThoughtPanel({
-  text,
-  highlight,
-  highlightValid,
-  onChange,
-  onAnalyze,
-  onNaturalPause,
-}: Props) {
+export function ThoughtPanel({ text, highlight, highlightValid, onChange, onVoiceText, onAnalyze, onNaturalPause }: Props) {
   const { t } = useT();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const cursorPosRef = useRef<number>(text.length);
 
-  const handleCursorUpdate = () => {
-    if (textareaRef.current) {
-      cursorPosRef.current = textareaRef.current.selectionStart;
-    }
-  };
-
-  const handleAppendVoice = (chunk: string) => {
-    const currentPos = cursorPosRef.current;
-    const { text: updatedText, nextCursor } = appendFinalTranscript(text, chunk, currentPos);
-    onChange(updatedText);
-    cursorPosRef.current = nextCursor;
-
-    // Restore focus and cursor position smoothly if user had textarea focused
-    if (textareaRef.current && document.activeElement === textareaRef.current) {
-      setTimeout(() => {
-        if (textareaRef.current) {
-          textareaRef.current.selectionStart = nextCursor;
-          textareaRef.current.selectionEnd = nextCursor;
-        }
-      }, 0);
-    }
+  const handleVoice = (chunk: string) => {
+    const el = textareaRef.current;
+    const focused = !!el && document.activeElement === el;
+    onVoiceText(chunk, focused ? el.selectionStart : undefined, (pos) => {
+      if (focused) requestAnimationFrame(() => el.setSelectionRange(pos, pos));
+    });
   };
 
   const hl = highlight && highlightValid ? highlight : undefined;
@@ -57,11 +38,7 @@ export function ThoughtPanel({
         <p className="muted small">{t.thoughtHint}</p>
       </div>
 
-      {/* Live Voice Controls beside/above the thought editor */}
-      <LiveVoiceControls
-        onFinalText={handleAppendVoice}
-        onNaturalPause={onNaturalPause}
-      />
+      <LiveVoiceControls onText={handleVoice} onNaturalPause={onNaturalPause} />
 
       <label htmlFor="thought" className="sr-only">
         {t.thoughtTitle}
@@ -72,13 +49,7 @@ export function ThoughtPanel({
         className="thought-input"
         value={text}
         placeholder={t.thoughtPlaceholder}
-        onChange={(e) => {
-          cursorPosRef.current = e.target.selectionStart;
-          onChange(e.target.value);
-        }}
-        onSelect={handleCursorUpdate}
-        onClick={handleCursorUpdate}
-        onKeyUp={handleCursorUpdate}
+        onChange={(e) => onChange(e.target.value)}
         rows={7}
       />
 

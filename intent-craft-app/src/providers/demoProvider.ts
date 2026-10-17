@@ -24,6 +24,8 @@ const RULES: Array<[CardType, RegExp]> = [
   ['constraint', suffix('mamalı|memeli|mamalıdır|memelidir')],
   ['need', words('istiyorum|gerek|lazım|ihtiyaç|göstersin|want|need|should')],
   ['need', suffix('malı|meli|malıdır|melidir')],
+  // Turkish request mood (olsun, çevirsin, eklesin): at least three letters before it, so "kesin" stays an idea.
+  ['need', /(?:\p{L}{3,}(?:s[ıiuü]n|s[ıiuü]nlar|s[ıiuü]nler)|(?<!\p{L})olsun(?:lar)?)(?!\p{L})/iu],
 ];
 
 export const classify = (sentence: string): CardType => RULES.find(([, re]) => re.test(sentence))?.[0] ?? 'idea';
@@ -46,11 +48,24 @@ export function sentenceSpans(text: string): Array<{ start: number; end: number;
   return spans;
 }
 
+/** "Format? TXT mi? MD mi?": short follow-up questions belong to the question before them (one contiguous quote). */
+function joinQuestionTails(text: string, spans: Array<{ start: number; end: number; quote: string }>) {
+  const out: typeof spans = [];
+  for (const s of spans) {
+    const prev = out[out.length - 1];
+    const short = s.quote.split(/\s+/).length <= 3;
+    if (prev && short && prev.quote.endsWith('?') && s.quote.endsWith('?') && /^\s*$/.test(text.slice(prev.end, s.start))) {
+      out[out.length - 1] = { start: prev.start, end: s.end, quote: text.slice(prev.start, s.end) };
+    } else out.push(s);
+  }
+  return out;
+}
+
 export const demoProvider: Provider = {
   id: 'demo-rules',
   live: false,
   extract(text, revision, makeId, now) {
-    return sentenceSpans(text).map(({ start, end, quote }) => ({
+    return joinQuestionTails(text, sentenceSpans(text)).map(({ start, end, quote }) => ({
       id: makeId(),
       type: classify(quote),
       title: quote.length > 70 ? quote.slice(0, 67).trimEnd() + '…' : quote,

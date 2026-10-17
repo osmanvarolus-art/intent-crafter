@@ -1,5 +1,7 @@
 // Pure domain rules. No React, no storage, no clock: callers pass `now`.
-import type { Card, Evidence, ReadinessCheck, SourceRef, TaskPackage, Workspace } from './types.ts';
+import type { Card, CardType, Evidence, ReadinessCheck, SourceRef, TaskPackage, Workspace } from './types.ts';
+
+const HISTORY_LIMIT = 50;
 
 export const emptyWorkspace = (): Workspace => ({
   schema: 1,
@@ -14,7 +16,7 @@ export const quoteIsValid = (text: string, ref: SourceRef): boolean =>
 
 const log = (card: Card, now: string, action: string): Card => ({
   ...card,
-  history: [...card.history, { at: now, action }],
+  history: [...card.history, { at: now, action }].slice(-HISTORY_LIMIT),
 });
 
 const mapCard = (ws: Workspace, id: string, fn: (c: Card) => Card): Workspace => ({
@@ -28,16 +30,31 @@ const mapCard = (ws: Workspace, id: string, fn: (c: Card) => Card): Workspace =>
  */
 export function applySourceEdit(ws: Workspace, text: string, now: string): Workspace {
   if (text === ws.sourceText) return ws;
+  // One edit region: text before `head` and after the old/new tails is unchanged, so most quotes just shift.
+  const old = ws.sourceText;
+  let head = 0;
+  while (head < old.length && head < text.length && old[head] === text[head]) head++;
+  let tail = 0;
+  while (tail < old.length - head && tail < text.length - head && old[old.length - 1 - tail] === text[text.length - 1 - tail]) tail++;
+  const delta = text.length - old.length;
+  const revision = ws.sourceRevision + 1;
   return {
     ...ws,
     sourceText: text,
-    sourceRevision: ws.sourceRevision + 1,
+    sourceRevision: revision,
     cards: ws.cards.map((c) => {
-      if (!c.source || c.freshness === 'needs_review' || quoteIsValid(text, c.source)) return c;
-      // An edit elsewhere only shifted the offsets: the exact quote is still there, once. Follow it.
-      const start = text.indexOf(c.source.quote);
-      if (start >= 0 && text.indexOf(c.source.quote, start + 1) < 0) {
-        return { ...c, source: { ...c.source, start, end: start + c.source.quote.length, revision: ws.sourceRevision + 1 } };
+      if (!c.source || c.freshness === 'needs_review') return c;
+      const { start, end, quote } = c.source;
+      if (end <= head) return c; // entirely before the edit
+      if (start >= old.length - tail) {
+        const moved = { ...c.source, start: start + delta, end: end + delta, revision };
+        return delta ? { ...c, source: moved } : c; // entirely after the edit: shift
+      }
+      if (quoteIsValid(text, c.source)) return c;
+      // The edit touched this quote. If its exact words still occur exactly once, follow them.
+      const at = text.indexOf(quote);
+      if (at >= 0 && text.indexOf(quote, at + 1) < 0) {
+        return { ...c, source: { ...c.source, start: at, end: at + quote.length, revision } };
       }
       return log({ ...c, freshness: 'needs_review', staleReason: 'source_changed' }, now, 'source changed');
     }),
@@ -98,6 +115,7 @@ export function readiness(ws: Workspace): ReadinessCheck[] {
     { id: 'confirmed_current', ok: staleConfirmed === 0, failing: staleConfirmed },
     { id: 'questions_answered', ok: openQuestions === 0, failing: openQuestions },
     { id: 'quotes_valid', ok: brokenQuotes === 0, failing: brokenQuotes },
+    { id: 'agent_precheck', ok: !!ws.precheck, failing: ws.precheck ? 0 : 1 },
   ];
 }
 
@@ -106,6 +124,10 @@ export function buildMarkdown(ws: Workspace): string {
   const decisions = ws.cards.filter((c) => isDecision(c) && c.freshness === 'current');
   const openOptions = ws.cards.filter((c) => c.type === 'option' && c.approval === 'suggested');
   const answered = ws.cards.filter((c) => c.type === 'question' && c.answer);
+  const leftToAgent = ws.cards.filter((c) => c.type === 'question' && !c.answer && c.approval === 'rejected');
+  // A demo-rule title is the body cut at 70 characters: print the sentence once.
+  const text = (c: Card) =>
+    c.body && c.body !== c.title && !(c.title.endsWith('…') && c.body.startsWith(c.title.slice(0, -1))) ? `**${c.title}**: ${c.body}` : `**${c.body || c.title}**`;
   const quote = (c: Card) => (c.source ? `\n  - Source quote [${c.source.start}:${c.source.end}]: "${c.source.quote}"` : '');
   const lines = [
     '# IntentCraft task package',
@@ -117,12 +139,13 @@ export function buildMarkdown(ws: Workspace): string {
     '## Confirmed decisions (mandatory scope)',
     '',
     ...(decisions.length
-      ? decisions.map((c) => `- [${c.id} r${c.revision}] (${c.type}, origin: ${c.origin}) **${c.title}**${c.body && c.body !== c.title ? `: ${c.body}` : ''}${quote(c)}`)
+      ? decisions.map((c) => `- [${c.id} r${c.revision}] (${c.type}, origin: ${c.origin}) ${text(c)}${quote(c)}`)
       : ['- None yet.']),
     '',
     '## Clarifications',
     '',
     ...(answered.length ? answered.map((c) => `- Q: ${c.title}\n  - A: ${c.answer}`) : ['- None.']),
+    ...(leftToAgent.length ? ['', 'Left to your judgement (the user chose not to decide; say what you chose):', '', ...leftToAgent.map((c) => `- ${c.title}`)] : []),
     '',
     '## Out of scope (unconfirmed options, do not implement)',
     '',
@@ -174,7 +197,75 @@ export const setEvidenceStatus = (ws: Workspace, id: string, status: Evidence['s
 });
 
 /** Trust boundary for persisted data: accept only the shape we wrote. */
-export function isWorkspace(v: unknown): v is Workspace {
-  const w = v as Workspace;
-  return !!w && w.schema === 1 && typeof w.sourceText === 'string' && Array.isArray(w.cards) && Array.isArray(w.evidence);
+const CARD_TYPES: CardType[] = ['idea', 'need', 'option', 'constraint', 'question'];
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isStr = (v: unknown): v is string => typeof v === 'string';
+const isInt = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0;
+
+function isCard(v: unknown): v is Card {
+  if (!isObj(v)) return false;
+  const s = v.source;
+  return isStr(v.id) && CARD_TYPES.includes(v.type as CardType) && isStr(v.title) && isStr(v.body) &&
+    (v.origin === 'ai' || v.origin === 'user') && ['suggested', 'confirmed', 'rejected'].includes(v.approval as string) &&
+    (v.freshness === 'current' || v.freshness === 'needs_review') && isInt(v.revision) && Array.isArray(v.history) &&
+    (v.answer === undefined || isStr(v.answer)) &&
+    (s === undefined || (isObj(s) && isInt(s.start) && isInt(s.end) && (s.end as number) >= (s.start as number) && isStr(s.quote) && isInt(s.revision)));
+}
+
+const isEvidence = (v: unknown): v is Evidence =>
+  isObj(v) && isStr(v.id) && isStr(v.claim) && ['reported', 'verified', 'disputed'].includes(v.status as string);
+
+/**
+ * Stored data -> a workspace the UI can render, or null when the shape is unusable.
+ * Damaged cards or claims are dropped one by one instead of losing the whole workspace.
+ */
+export function sanitizeWorkspace(v: unknown): Workspace | null {
+  if (!isObj(v) || v.schema !== 1 || !isStr(v.sourceText) || !Array.isArray(v.cards) || !Array.isArray(v.evidence)) return null;
+  const pkg = isObj(v.pkg) && isStr(v.pkg.markdown) && isStr(v.pkg.createdAt) && isObj(v.pkg.cardRevisions) ? (v.pkg as unknown as TaskPackage) : undefined;
+  const pc = v.precheck;
+  const precheck = isObj(pc) && isStr(pc.at) && isInt(pc.sourceRevision) && isStr(pc.engine) && isInt(pc.questions)
+    ? (pc as unknown as Workspace['precheck']) : undefined;
+  return {
+    schema: 1,
+    sourceText: v.sourceText,
+    sourceRevision: isInt(v.sourceRevision) ? v.sourceRevision : 0,
+    cards: v.cards.filter(isCard),
+    evidence: v.evidence.filter(isEvidence),
+    ...(pkg && { pkg }),
+    ...(precheck && { precheck }),
+  };
+}
+
+export const isWorkspace = (v: unknown): v is Workspace => {
+  const w = sanitizeWorkspace(v);
+  return !!w && w.cards.length === (v as Workspace).cards.length && w.evidence.length === (v as Workspace).evidence.length;
+};
+
+/**
+ * Questions from the coding agent's pre-check become question cards (origin ai, no source quote).
+ * A question already on the board (same wording) is not added twice.
+ */
+export function addPrecheck(
+  ws: Workspace,
+  questions: Array<{ q: string; why?: string }>,
+  engine: string,
+  makeId: () => string,
+  now: string,
+): Workspace {
+  const seen = new Set(ws.cards.map((c) => c.title.trim().toLowerCase()));
+  const cards: Card[] = [];
+  for (const { q, why } of questions) {
+    const title = q.trim();
+    if (!title || seen.has(title.toLowerCase())) continue;
+    seen.add(title.toLowerCase());
+    cards.push({
+      id: makeId(), type: 'question', title, body: (why ?? '').trim(), origin: 'ai', approval: 'suggested',
+      freshness: 'current', revision: 1, history: [{ at: now, action: 'asked by the coding agent pre-check' }],
+    });
+  }
+  return {
+    ...ws,
+    cards: [...ws.cards, ...cards],
+    precheck: { at: now, sourceRevision: ws.sourceRevision, engine, questions: cards.length },
+  };
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Card, CardType } from '../domain/types.ts';
 import { useT } from '../i18n.ts';
 import { CardView, type CardActions } from './CardView.tsx';
@@ -9,8 +9,15 @@ const TYPES: CardType[] = ['idea', 'need', 'option', 'constraint', 'question'];
 export function Board({ cards, selectedId, actions }: { cards: Card[]; selectedId?: string; actions: CardActions }) {
   const { t } = useT();
   const [filter, setFilter] = useState<Filter>('all');
-  const count = (f: Filter) =>
-    cards.filter((c) => f === 'all' || (f === 'decisions' ? c.approval === 'confirmed' : c.type === f)).length;
+  const counts = useMemo(() => {
+    const n: Record<string, number> = { all: cards.length, decisions: 0 };
+    for (const c of cards) {
+      n[c.type] = (n[c.type] ?? 0) + 1;
+      if (c.approval === 'confirmed') n.decisions++;
+    }
+    return n;
+  }, [cards]);
+  const count = (f: Filter) => counts[f] ?? 0;
   const shown = cards.filter((c) => filter === 'all' || (filter === 'decisions' ? c.approval === 'confirmed' : c.type === filter));
   const label = (f: Filter) => (f === 'all' ? t.all : f === 'decisions' ? t.decisions : t.type[f]);
 

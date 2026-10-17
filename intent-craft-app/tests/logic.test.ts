@@ -2,8 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  addReportedEvidence, answerQuestion, applySourceEdit, buildMarkdown, confirmCard, editCard, emptyWorkspace,
-  markReviewed, mergeSuggestions, packageStatus, preparePackage, quoteIsValid, readiness, setEvidenceStatus,
+  addPrecheck, addReportedEvidence, sanitizeWorkspace, answerQuestion, applySourceEdit, buildMarkdown, confirmCard, editCard, emptyWorkspace,
+  markReviewed, rejectCard, mergeSuggestions, packageStatus, preparePackage, quoteIsValid, readiness, setEvidenceStatus,
 } from '../src/domain/logic.ts';
 import { classify, demoProvider, sentenceSpans } from '../src/providers/demoProvider.ts';
 
@@ -71,6 +71,8 @@ test('edit earlier in the text moves later quotes instead of marking them stale'
 test('task package: deterministic, excludes unconfirmed options, goes stale on edit', () => {
   let ws = confirmCard(analysed(), 'c3', NOW);
   ws = answerQuestion(ws, 'c4', 'Before every file change', NOW);
+  assert.equal(readiness(ws).find((r) => r.id === 'agent_precheck')!.ok, false); // the agent has not read it yet
+  ws = addPrecheck(ws, [], 'test-model', id, NOW);
   assert.ok(readiness(ws).every((r) => r.ok));
   assert.equal(buildMarkdown(ws), buildMarkdown(ws));
   ws = preparePackage(ws, NOW);
@@ -112,5 +114,68 @@ test('demo provider: Turkish necessity suffixes and question forms', () => {
   assert.equal(classify('Bildirimler kapatılabilmeli mi.'), 'question');
   assert.equal(classify('Hangi dilleri desteklesin.'), 'question');
   assert.equal(classify('Photos are required.'), 'constraint');
-  assert.equal(classify('Raporlar PDF olarak indirilebilsin.'), 'idea');
+  assert.equal(classify('Raporlar PDF olarak indirilebilsin.'), 'need');
+  assert.equal(classify('Giriş Google hesabıyla olsun.'), 'need');
+  assert.equal(classify('Bu kesin.'), 'idea');
+});
+
+test('pre-check questions become answerable cards; dismissed ones are left to the agent in the package', () => {
+  let ws = confirmCard(analysed(), 'c3', NOW);
+  ws = answerQuestion(ws, 'c4', 'Before every file change', NOW);
+  ws = addPrecheck(ws, [{ q: 'Which device do you use?', why: 'Changes the platform.' }, { q: 'Which device do you use?' }, { q: '  ' }], 'gemma4-12b', id, NOW);
+  const asked = ws.cards.filter((c) => c.history[0].action.includes('pre-check'));
+  assert.equal(asked.length, 1); // duplicate and empty questions dropped
+  assert.equal(asked[0].type, 'question');
+  assert.equal(asked[0].source, undefined);
+  assert.equal(ws.precheck?.engine, 'gemma4-12b');
+  assert.equal(readiness(ws).find((r) => r.id === 'questions_answered')!.ok, false);
+  ws = rejectCard(ws, asked[0].id, NOW);
+  assert.ok(readiness(ws).every((r) => r.ok));
+  const md = buildMarkdown(ws);
+  assert.match(md, /Left to your judgement[\s\S]*Which device do you use\?/);
+});
+
+test('package prints a truncated demo title and its sentence once', () => {
+  const long = 'Benim istediğim şey şu: ben Claude ile sohbet ederken konuşmalarımı takip etsin ve Fransızcaya çevirsin.';
+  n = 0;
+  let ws = mergeSuggestions({ ...emptyWorkspace(), sourceText: long, sourceRevision: 1 }, demoProvider.extract(long, 1, id, NOW));
+  ws = confirmCard(ws, 'c1', NOW);
+  const md = buildMarkdown(ws);
+  assert.equal(md.split(long).length - 1, 3); // original thought, decision, source quote: not a fourth copy
+  assert.doesNotMatch(md, /…\*\*:/);
+});
+
+test('sanitizeWorkspace keeps good cards and drops damaged ones instead of crashing the app', () => {
+  n = 0;
+  const good = analysed();
+  const raw = JSON.parse(JSON.stringify(good));
+  raw.cards.push({ id: 'x', type: 'banana', title: 't', body: '', origin: 'ai', approval: 'suggested', freshness: 'current', revision: 1, history: [] });
+  raw.cards.push({ ...raw.cards[0], id: 'y', history: undefined });
+  raw.cards.push({ ...raw.cards[0], id: 'z', source: { start: 5, end: 2, quote: 'a', revision: 1 } });
+  const ws = sanitizeWorkspace(raw)!;
+  assert.equal(ws.cards.length, good.cards.length);
+  assert.equal(sanitizeWorkspace({ schema: 2 }), null);
+  assert.equal(sanitizeWorkspace('{broken'), null);
+});
+
+test('source edit: quotes before and after the edit stay current and exact', () => {
+  n = 0;
+  let ws = analysed();
+  for (const c of ws.cards) ws = confirmCard(ws, c.id, NOW);
+  const edited = 'Ek bir cümle. ' + TEXT;
+  ws = applySourceEdit(ws, edited, NOW);
+  for (const c of ws.cards) {
+    assert.equal(c.freshness, 'current', c.title);
+    assert.ok(quoteIsValid(edited, c.source!), c.title);
+  }
+});
+
+test('demo provider: short follow-up questions join the question before them', () => {
+  const t = 'Hangi formatta kaydetsin? TXT mi? MD mi? Hızlı olsun.';
+  const cards = demoProvider.extract(t, 1, id, NOW);
+  assert.deepEqual(cards.map((c) => [c.type, c.source!.quote]), [
+    ['question', 'Hangi formatta kaydetsin? TXT mi? MD mi?'],
+    ['need', 'Hızlı olsun.'],
+  ]);
+  assert.ok(cards.every((c) => quoteIsValid(t, c.source!)));
 });
