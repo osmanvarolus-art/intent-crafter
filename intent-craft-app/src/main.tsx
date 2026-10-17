@@ -1,5 +1,8 @@
 import { Component, StrictMode, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
+import '@fontsource-variable/inter'
+import '@fontsource-variable/source-serif-4'
+import '@fontsource-variable/source-serif-4/opsz-italic.css'
 import './index.css'
 import App from './App.tsx'
 import { STRINGS } from './i18n.ts'

@@ -1,6 +1,7 @@
 import { memo, useState } from 'react';
 import type { Card } from '../domain/types.ts';
 import { useT } from '../i18n.ts';
+import { Icon } from './Icon.tsx';
 
 const norm = (s: string) => s.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
@@ -43,6 +44,7 @@ const Point = memo(function Point({ card, selected, actions }: { card: Card; sel
           {sentence}
           {card.source && norm(card.source.quote) !== norm(sentence) && <span className="point-quote">“{card.source.quote}”</span>}
           {!card.source && <span className="point-quote">{t.noQuote}</span>}
+          {card.type === 'option' && card.approval === 'suggested' && <span className="point-hint">{t.optionHint}</span>}
           {stale && <span className="point-stale">{t.changedText}</span>}
         </button>
       )}
@@ -51,16 +53,16 @@ const Point = memo(function Point({ card, selected, actions }: { card: Card; sel
           {stale && <button className="btn" onClick={() => actions.reviewed(card.id)}>{t.reviewed}</button>}
           {card.approval === 'suggested' ? (
             <>
-              <button className="btn confirm" onClick={() => actions.confirm(card.id)}>✓ {t.keep}</button>
-              <button className="btn ghost" onClick={() => actions.reject(card.id)}>✕ {t.drop}</button>
+              <button className="btn confirm" onClick={() => actions.confirm(card.id)}><Icon name="check" /> {t.keep}</button>
+              <button className="btn ghost" onClick={() => actions.reject(card.id)}><Icon name="x" /> {t.drop}</button>
             </>
           ) : (
             <>
-              <span className={`point-state is-${card.approval}`}>{card.approval === 'confirmed' ? `✓ ${t.kept}` : t.dropped}</span>
+              <span className={`point-state is-${card.approval}`}>{card.approval === 'confirmed' ? <><Icon name="check" size={14} /> {t.kept}</> : t.dropped}</span>
               <button className="btn ghost" onClick={() => actions.reopen(card.id)}>{t.undoChoice}</button>
             </>
           )}
-          <button className="btn ghost icon" onClick={() => setEditing(true)} aria-label={t.edit} title={t.edit}>✎</button>
+          <button className="btn ghost icon-btn" onClick={() => setEditing(true)} aria-label={t.edit} title={t.edit}><Icon name="pencil" /></button>
         </span>
       )}
     </li>
@@ -82,14 +84,14 @@ export function CheckStep({ cards, selectedId, actions, onNext, split, onStartOv
   const decisions = points.filter((c) => c.approval === 'confirmed');
   const allStale = decisions.length > 0 && decisions.every((c) => c.freshness === 'needs_review');
   if (split.running && !points.length) return <p className="empty" role="status">{t.splitting}</p>;
-  if (!points.length) return <p className="empty">{t.nothingToCheck}</p>;
+  if (!points.length) return <p className="empty">{t.tellPanel}</p>;
   return (
     <div className="step-body">
       <div className="step-head">
         <p>{t.stepCheckIntro}</p>
         {open.length > 1 && (
-          <button id="keep-all" className="btn" onClick={() => open.forEach((c) => actions.confirm(c.id))}>
-            ✓ {t.keepAll} ({open.length})
+          <button id="keep-all" className="btn primary" onClick={() => open.forEach((c) => actions.confirm(c.id))}>
+            <Icon name="check" /> {points.some((c) => c.type === 'option' && c.approval === 'suggested') ? t.keepAllButOptions(open.length) : `${t.keepAll} (${open.length})`}
           </button>
         )}
       </div>
@@ -106,12 +108,14 @@ export function CheckStep({ cards, selectedId, actions, onNext, split, onStartOv
           <Point key={`${c.id}-${c.revision}`} card={c} selected={c.id === selectedId} actions={actions} />
         ))}
       </ul>
-      <p className="muted small">
-        {split.engine && split.engine !== 'rules' ? t.splitByModel(split.engine) : t.stepCheckRuleNote}
-        {split.error && ` (${split.error})`}
+      <p className="muted small" title={split.engine && split.engine !== 'rules' ? split.engine : split.error}>
+        {split.engine && split.engine !== 'rules' ? t.splitByModel : t.stepCheckRuleNote}
       </p>
       <div className="step-foot">
-        <button id="next-questions" className="btn primary" onClick={onNext}>{t.next}: {t.steps.questions} →</button>
+        {/* "Keep all" is the main action while it is shown; otherwise moving on is. */}
+        <button id="next-questions" className={`btn ${open.length > 1 ? 'ghost' : 'primary'}`} onClick={onNext}>
+          {open.length ? t.skipTo : t.next}: {t.steps.questions} <Icon name="arrow" size={14} />
+        </button>
       </div>
     </div>
   );

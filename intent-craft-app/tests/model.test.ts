@@ -65,3 +65,9 @@ test('cardsFromItems: what the user asked stays a question, even if the model ma
   assert.equal(c.title, 'internet yoksa da çalışabilir mi?'); // the user's words, not the model's statement
   assert.ok(quoteIsValid(text, c.source!));
 });
+
+test('cardsFromItems: a question the user asked keeps the user\'s words even when the model typed it as a question', () => {
+  const text = 'Hangi formatta kaydetsin? TXT mi? MD mi?';
+  const [c] = cardsFromItems(text, [{ type: 'question', text: 'Kayıt formatı henüz belirlenmemiştir.', quote: 'Hangi formatta kaydetsin? TXT mi? MD mi?' }], 1, () => 'q', 'NOW', 'm');
+  assert.equal(c.title, 'Hangi formatta kaydetsin? TXT mi? MD mi?');
+});

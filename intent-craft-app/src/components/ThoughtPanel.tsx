@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { SourceRef } from '../domain/types.ts';
 import { useT } from '../i18n.ts';
 import { LiveVoiceControls } from './LiveVoiceControls.tsx';
+import { Icon } from './Icon.tsx';
 
 interface Props {
   text: string;
@@ -17,7 +18,7 @@ interface Props {
   onVoiceFinished: () => void;
 }
 
-export function ThoughtPanel({ text, highlight, highlightValid, onChange, onVoiceText, onAnalyze, onVoiceFinished, splitting }: Props & { splitting: boolean }) {
+export function ThoughtPanel({ text, highlight, highlightValid, onChange, onVoiceText, onAnalyze, onVoiceFinished, splitting, analyzePrimary }: Props & { splitting: boolean; analyzePrimary: boolean }) {
   const { t } = useT();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -46,7 +47,7 @@ export function ThoughtPanel({ text, highlight, highlightValid, onChange, onVoic
         <p className="muted small">{t.stepTellHint}</p>
       </div>
 
-      <LiveVoiceControls onText={handleVoice} onFinished={onVoiceFinished} />
+      <LiveVoiceControls onText={handleVoice} onFinished={onVoiceFinished} primary={!text.trim()} />
 
       <label htmlFor="thought" className="sr-only">
         {t.thoughtTitle}
@@ -67,11 +68,11 @@ export function ThoughtPanel({ text, highlight, highlightValid, onChange, onVoic
         </span>
         <button
           id="analyze"
-          className="btn primary"
+          className={`btn ${analyzePrimary ? 'primary' : ''}`}
           onClick={onAnalyze}
           disabled={!text.trim() || splitting}
         >
-          {splitting ? t.splitting : `${t.splitIdea} →`}
+          {splitting ? t.splitting : <>{t.splitIdea} <Icon name="arrow" size={14} /></>}
         </button>
       </div>
     </section>

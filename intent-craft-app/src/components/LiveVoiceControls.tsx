@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { DictationSession, type DictationState, type Mic } from '../domain/voiceSession.ts';
 import { useT } from '../i18n.ts';
+import { Icon } from './Icon.tsx';
 
 /** Microphone with a loudness meter; each recording is a complete audio file the STT service can read. */
 async function openBrowserMic(): Promise<Mic> {
@@ -50,9 +51,11 @@ interface Props {
   onText: (chunk: string) => void;
   /** After Stop, once every phrase is written: split the thought into points. */
   onFinished: () => void;
+  /** The main action only while nothing is written yet. */
+  primary: boolean;
 }
 
-export function LiveVoiceControls({ onText, onFinished }: Props) {
+export function LiveVoiceControls({ onText, onFinished, primary }: Props) {
   const { t, lang } = useT();
   const [available, setAvailable] = useState<boolean | null>(null);
   const [state, setState] = useState<DictationState>('idle');
@@ -120,27 +123,26 @@ export function LiveVoiceControls({ onText, onFinished }: Props) {
 
   return (
     <div className="voice-controls-container" aria-label={t.voiceStart}>
-      <p className="voice-disclosure small muted" role="note">{t.voiceLocal}</p>
       <div className="row between voice-bar">
         <div className="row voice-actions">
           {(state === 'idle' || state === 'error' || state === 'starting') && (
-            <button id="voice-start" type="button" className="btn primary" onClick={start} disabled={!available || state === 'starting'}>
-              <span aria-hidden="true">🎙️</span> {state === 'error' ? t.voiceRetry : t.voiceStart}
+            <button id="voice-start" type="button" className={`btn ${primary ? 'primary' : ''}`} onClick={start} disabled={!available || state === 'starting'}>
+              <Icon name="mic" /> {state === 'error' ? t.voiceRetry : t.voiceStart}
             </button>
           )}
           {state === 'listening' && (
             <button id="voice-pause" type="button" className="btn" onClick={() => void sessionRef.current?.pause()}>
-              ⏸ {t.voicePause}
+              <Icon name="pause" /> {t.voicePause}
             </button>
           )}
           {state === 'paused' && (
             <button id="voice-resume" type="button" className="btn primary" onClick={start}>
-              ▶ {t.voiceResume}
+              <Icon name="play" /> {t.voiceResume}
             </button>
           )}
           {(state === 'listening' || state === 'paused') && (
             <button id="voice-stop" type="button" className="btn ghost" onClick={() => void sessionRef.current?.stop()}>
-              ⏹ {t.voiceStop}
+              <Icon name="stop" /> {t.voiceStop}
             </button>
           )}
         </div>
@@ -150,6 +152,7 @@ export function LiveVoiceControls({ onText, onFinished }: Props) {
           {pending > 0 && ` · ${t.voiceTranscribing}`}
         </span>
       </div>
+      <p className="voice-disclosure small muted" role="note">{t.voiceLocal}</p>
       {error && (
         <div className="voice-error small" role="alert">
           {error}

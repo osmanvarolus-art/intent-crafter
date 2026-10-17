@@ -1,8 +1,10 @@
 import { useT } from '../i18n.ts';
+import { Icon } from './Icon.tsx';
 
 interface Props {
   /** Shown only when something needs saying (e.g. the model was not reachable). */
   notice?: string;
+  noticeDetail?: string;
   onNewIdea: () => void;
   saving: boolean;
   saveFailed: boolean;
@@ -13,7 +15,7 @@ interface Props {
   onToggleLang: () => void;
 }
 
-export function Header({ notice, onNewIdea, saving, saveFailed, canUndo, canRedo, onUndo, onRedo, onToggleLang }: Props) {
+export function Header({ notice, noticeDetail, onNewIdea, saving, saveFailed, canUndo, canRedo, onUndo, onRedo, onToggleLang }: Props) {
   const { t } = useT();
   return (
     <header className="topbar">
@@ -25,7 +27,7 @@ export function Header({ notice, onNewIdea, saving, saveFailed, canUndo, canRedo
         </div>
       </div>
       {notice && (
-        <p className="demo-banner" role="note">
+        <p className="demo-banner" role="note" title={noticeDetail}>
           {notice}
         </p>
       )}
@@ -35,7 +37,7 @@ export function Header({ notice, onNewIdea, saving, saveFailed, canUndo, canRedo
           {saveFailed ? t.saveFailed : saving ? t.saving : t.saved}
         </span>
         <button id="new-idea" className="btn" onClick={onNewIdea} title={t.newIdeaHint}>
-          + {t.newIdea}
+          <Icon name="plus" /> {t.newIdea}
         </button>
         <button id="undo" className="btn ghost" onClick={onUndo} disabled={!canUndo} aria-keyshortcuts="Control+Z">
           {t.undo}

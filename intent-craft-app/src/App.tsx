@@ -39,7 +39,7 @@ const isEditable = (el: EventTarget | null) =>
 
 export default function App() {
   const { ws, commit, undo, redo, canUndo, canRedo, saving, saveFailed } = useWorkspace();
-  const [precheck, setPrecheck] = useState<{ running: boolean; message?: string; error?: boolean }>({ running: false });
+  const [precheck, setPrecheck] = useState<{ running: boolean; message?: string; error?: boolean; detail?: string }>({ running: false });
   const [lang, setLang] = useState<Lang>(() => {
     const saved = localStorage.getItem('intentcraft.lang');
     return saved && Object.hasOwn(STRINGS, saved) ? (saved as Lang) : 'en'; // unknown or corrupt value: never crash
@@ -49,6 +49,8 @@ export default function App() {
   const [split, setSplit] = useState<{ running: boolean; engine?: string; error?: string }>({ running: false });
   // The workspace as last rendered, for callbacks that fire after React has applied their own updates.
   const latestWs = useRef(ws);
+  const stepTitle = useRef<HTMLHeadingElement>(null);
+  const [splitAt, setSplitAt] = useState(-1);
   useLayoutEffect(() => {
     latestWs.current = ws;
   });
@@ -114,6 +116,9 @@ export default function App() {
     }
     commit((w) => (w.sourceRevision === rev ? rules.mergeSuggestions(w, cards) : w));
     setSplit({ running: false, engine, error });
+    setSplitAt(rev);
+    // On a phone the points land below the text: bring them into view.
+    if (window.matchMedia('(max-width: 900px)').matches) stepTitle.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const newIdea = (keepText = false) => {
@@ -144,9 +149,9 @@ export default function App() {
       const engine = body.engine ?? '?';
       const added = rules.addPrecheck(ws, body.questions, engine, newId, at).precheck?.questions ?? 0;
       commit((w) => rules.addPrecheck(w, body.questions!, engine, newId, at));
-      setPrecheck({ running: false, message: i18n.t.precheckDone(added, engine) });
+      setPrecheck({ running: false, message: i18n.t.precheckDone(added), detail: engine });
     } catch (e) {
-      setPrecheck({ running: false, error: true, message: `${i18n.t.precheckFailed}: ${e instanceof Error ? e.message : String(e)}` });
+      setPrecheck({ running: false, error: true, message: i18n.t.precheckFailed, detail: e instanceof Error ? e.message : String(e) });
     }
   };
 
@@ -172,6 +177,7 @@ export default function App() {
       <div className="app">
         <Header
           notice={split.engine === 'rules' ? i18n.t.demoBanner : undefined}
+          noticeDetail={split.error}
           onNewIdea={() => newIdea()}
           saving={saving}
           saveFailed={saveFailed}
@@ -200,9 +206,10 @@ export default function App() {
             // After dictation stops: let React apply the last phrase, then split the text it produced.
             onVoiceFinished={() => setTimeout(() => void suggest(latestWs.current), 0)}
             splitting={split.running}
+            analyzePrimary={!points.length || ws.sourceRevision !== splitAt}
           />
           <section className="panel step-panel" aria-labelledby="step-title">
-            <h2 id="step-title">{t.steps[step === 'tell' ? 'check' : step]}</h2>
+            <h2 id="step-title" ref={stepTitle} tabIndex={-1}>{t.steps[step === 'tell' && points.length ? 'check' : step]}</h2>
             {(step === 'check' || step === 'tell') && (
               <CheckStep cards={ws.cards} selectedId={selectedId} actions={actions} onNext={goQuestions} split={split} onStartOver={() => newIdea(true)} />
             )}
