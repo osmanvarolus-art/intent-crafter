@@ -97,3 +97,20 @@ test('agent evidence is reported until the user verifies it', () => {
   assert.equal(ws.evidence[0].status, 'verified');
   assert.equal(ws.evidence[1].status, 'reported');
 });
+
+test('demo provider: decimals, domains and abbreviations do not split a clause', () => {
+  const t = 'Version 2.0 must ship before May, e.g. with CSV export. See example.com today.';
+  assert.deepEqual(sentenceSpans(t).map((s) => s.quote), [
+    'Version 2.0 must ship before May, e.g. with CSV export.', 'See example.com today.',
+  ]);
+  for (const s of sentenceSpans(t)) assert.equal(t.slice(s.start, s.end), s.quote);
+});
+
+test('demo provider: Turkish necessity suffixes and question forms', () => {
+  assert.equal(classify('Uygulama hızlı açılmalı.'), 'need');
+  assert.equal(classify('Kullanıcı verisi paylaşılmamalı.'), 'constraint');
+  assert.equal(classify('Bildirimler kapatılabilmeli mi.'), 'question');
+  assert.equal(classify('Hangi dilleri desteklesin.'), 'question');
+  assert.equal(classify('Photos are required.'), 'constraint');
+  assert.equal(classify('Raporlar PDF olarak indirilebilsin.'), 'idea');
+});

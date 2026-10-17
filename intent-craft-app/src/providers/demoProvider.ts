@@ -12,19 +12,28 @@ export interface Provider {
 // JS \b is ASCII-only, so Turkish letters (ı, ç, ü…) need Unicode-aware boundaries.
 const words = (list: string) => new RegExp(`(?<!\\p{L})(${list})(?!\\p{L})`, 'iu');
 
+// Turkish necessity is a suffix (açılmalı, gösterilmeli), negated as -mamalı/-memeli.
+const suffix = (re: string) => new RegExp(`\\p{L}(${re})(?!\\p{L})`, 'iu');
+
 const RULES: Array<[CardType, RegExp]> = [
   ['question', /\?\s*$/u],
+  ['question', words('mi|mı|mu|mü|misin|mısın|musun|müsün|midir|mıdır')],
+  ['question', /^\s*(hangi|neden|niçin|niye|kaç)(?!\p{L})/iu],
   ['option', words('belki|olabilir|ya da|veya|maybe|perhaps|could|or')],
-  ['constraint', words('kalsın|asla|sadece|yalnızca|olmamalı|zorunda|never|only|must|must not|should not')],
+  ['constraint', words('kalsın|asla|sadece|yalnızca|olmamalı|zorunda|zorunlu|never|only|must|must not|should not|required|mandatory')],
+  ['constraint', suffix('mamalı|memeli|mamalıdır|memelidir')],
   ['need', words('istiyorum|gerek|lazım|ihtiyaç|göstersin|want|need|should')],
+  ['need', suffix('malı|meli|malıdır|melidir')],
 ];
 
 export const classify = (sentence: string): CardType => RULES.find(([, re]) => re.test(sentence))?.[0] ?? 'idea';
 
-/** Clause spans with exact UTF-16 offsets, whitespace excluded. Splits at . ! ? newline and ama/fakat/but. */
+/** Clause spans with exact UTF-16 offsets, whitespace excluded. Splits at sentence-ending . ! ? newline and ama/fakat/but. */
 export function sentenceSpans(text: string): Array<{ start: number; end: number; quote: string }> {
   const spans = [];
-  for (const m of text.matchAll(/[^.!?\n]+[.!?]*/gu)) {
+  // A "." inside a token (2.0, example.com, e.g) or right after a short abbreviation does not end a clause.
+  const clause = /(?:[^.!?\n]|\.(?=[^\s.!?])|(?<=(?<!\p{L})(?:e\.g|i\.e|etc|vs|örn|vb|bkz|dr|mr|mrs|ms))\.)+[.!?]*/giu;
+  for (const m of text.matchAll(clause)) {
     let offset = m.index;
     // Odd entries are the captured separators; they advance the offset but are not quoted.
     for (const [i, part] of m[0].split(/(\s+(?:ama|fakat|but)\s+)/iu).entries()) {

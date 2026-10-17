@@ -70,7 +70,7 @@ npm run dev
 ---
 
 ## 4. Current State & Verification
-- **Test Suite**: 13/13 unit tests passing (Node.js test runner).
+- **Test Suite**: 15/15 unit tests passing (Node.js test runner).
 - **Linter**: `oxlint` reports 0 errors and 0 warnings.
 - **Production Build**: `tsc -b && vite build` succeeds with zero errors.
 - **Dev Server**: Running at `http://localhost:5173`.

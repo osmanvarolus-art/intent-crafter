@@ -16,7 +16,10 @@ const isEditable = (el: EventTarget | null) =>
 
 export default function App() {
   const { ws, commit, undo, redo, canUndo, canRedo, saving } = useWorkspace();
-  const [lang, setLang] = useState<Lang>(() => (localStorage.getItem('intentcraft.lang') as Lang) || 'en');
+  const [lang, setLang] = useState<Lang>(() => {
+    const saved = localStorage.getItem('intentcraft.lang');
+    return saved && Object.hasOwn(STRINGS, saved) ? (saved as Lang) : 'en'; // unknown or corrupt value: never crash
+  });
   const [selectedId, setSelectedId] = useState<string>();
   const i18n = useMemo(() => ({ t: STRINGS[lang], lang }), [lang]);
 

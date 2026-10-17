@@ -35,15 +35,16 @@ function reducer(h: History, a: Action): History {
   }
 }
 
-function load(): Workspace {
+function parse(json: string | null): Workspace | null {
   try {
-    const raw = JSON.parse(localStorage.getItem(KEY) ?? 'null');
-    if (isWorkspace(raw)) return raw;
+    const raw = JSON.parse(json ?? 'null');
+    return isWorkspace(raw) ? raw : null;
   } catch {
-    /* corrupt storage: start clean rather than crash */
+    return null; // corrupt storage: start clean rather than crash
   }
-  return emptyWorkspace();
 }
+
+const load = (): Workspace => parse(localStorage.getItem(KEY)) ?? emptyWorkspace();
 
 export function useWorkspace() {
   const [h, dispatch] = useReducer(reducer, undefined, () => ({ past: [], present: load(), future: [] }));
@@ -56,11 +57,27 @@ export function useWorkspace() {
       return;
     }
     const t = setTimeout(() => {
-      localStorage.setItem(KEY, JSON.stringify(h.present));
+      try {
+        const json = JSON.stringify(h.present);
+        if (localStorage.getItem(KEY) !== json) localStorage.setItem(KEY, json);
+      } catch {
+        /* storage full or blocked: keep working in memory */
+      }
       setSaving(false);
     }, 300);
     return () => clearTimeout(t);
   }, [h.present]);
+
+  // Another tab saved: take its version (as an undoable step) instead of overwriting it on our next save.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== KEY) return;
+      const ws = parse(e.newValue);
+      if (ws) dispatch({ kind: 'commit', fn: () => ws, key: 'other-tab' });
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   const commit = useCallback((fn: (ws: Workspace) => Workspace, key?: string) => {
     setSaving(true);
