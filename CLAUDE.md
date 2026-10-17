@@ -36,7 +36,8 @@ npm run build
 - `intent-craft-app/`: Primary React + TypeScript application
   - `src/domain/types.ts`: Core data structures (`Card`, `Workspace`, `TaskPackage`, `Evidence`).
   - `src/domain/logic.ts`: Pure business rules (staleness checks, readiness checks, deterministic markdown).
-  - `src/domain/voice.ts`: Speech result processing, duplicate prevention, and cursor-safe text appending.
+  - `src/domain/voice.ts`: Cursor-safe insertion of dictated text.
+  - `src/domain/voiceSession.ts`: Dictation without browser speech services: phrase detection from microphone loudness, ordered transcription.
   - `src/providers/demoProvider.ts`: Heuristic rule-based sentence/clause extraction (Unicode-aware).
   - `src/providers/glossary.ts`: Living glossary definitions and contextual relevance filtering.
   - `src/state/useWorkspace.ts`: Reducer-based undo/redo history + debounced `localStorage` persistence.
@@ -48,13 +49,19 @@ npm run build
     - `LearnPanel.tsx`: One open clarifying question at a time and contextual living concepts.
     - `TaskDrawer.tsx`: Readiness checklist, deterministic task package exporter, agent evidence verifier.
   - `tests/`:
-    - `logic.test.ts`: Domain rule invariant tests.
-    - `voice.test.ts`: Live voice, duplicate prevention, and cursor preservation tests.
+    - `logic.test.ts`: Domain rules, demo provider, pre-check cards, damaged-data handling.
+    - `voice.test.ts`, `voiceSession.test.ts`: Text insertion, phrase detection, speaking order, pause/resume, errors.
+    - `precheck.test.ts`: Pre-check parsing and engine fallback. `storage.test.ts`: undo history and damaged-data backup.
 - `assets/`: original HTML prototypes and design images.
 - Reference projects (not copied here): two-agent spoken dialogue `~/Archive/20261004-dev-inventory/claude-dual`, local VoxCPM2 speech assistant `~/Archive/20261002-dev-inventory/voice-vox`.
 
-## Running copy
-`intentcraft.service` (user systemd) builds and serves the app at http://127.0.0.1:4173; Hyprland opens it on the right-hand monitor. After a change: `systemctl --user restart intentcraft`.
+## Running copy and local services
+- `intentcraft.service` (user systemd) builds and serves the app at http://127.0.0.1:4173; Hyprland opens it on the right-hand monitor. Open it with `intentcraft`. After a change: `systemctl --user restart intentcraft`.
+- `intentcraft-stt.service` runs `stt/server.py` (faster-whisper large-v3-turbo on the GPU, http://127.0.0.1:8797). The app reaches it through the Vite proxy at `/api/stt`; audio never leaves the machine. Browser speech APIs are not used (Brave has none).
+- `/api/precheck` (Vite middleware, `intent-craft-app/server/precheck.ts`) asks a coding agent what it would otherwise guess: local models via llama-swap (127.0.0.1:8081, `gemma4-12b`, then `bonsai-27b`), the Claude CLI last. Override with `INTENTCRAFT_LLM_MODELS` / `INTENTCRAFT_LLM_URL`.
+
+## Purpose metric
+Success is measured by how much a coding agent still has to guess, not by how the cards look: give the prepared package to an agent and count its open questions (2026-10-17: raw idea 10 guesses / 5 of 10, old package 11 / 4 of 10, package with voice + agent pre-check 9 / 6 of 10, with the two architecture-level unknowns resolved).
 
 ## Guidelines for Claude Code
 - Keep interface text in English.

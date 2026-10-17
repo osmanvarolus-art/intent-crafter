@@ -53,6 +53,15 @@ export interface TaskPackage {
   markdown: string;
 }
 
+/** The coding agent's pre-check: questions it would otherwise have to guess. */
+export interface Precheck {
+  at: string;
+  sourceRevision: number;
+  /** Which model answered (local model id or "claude"). */
+  engine: string;
+  questions: number;
+}
+
 export interface Workspace {
   schema: 1;
   sourceText: string;
@@ -60,10 +69,11 @@ export interface Workspace {
   cards: Card[];
   pkg?: TaskPackage;
   evidence: Evidence[];
+  precheck?: Precheck;
 }
 
 export interface ReadinessCheck {
-  id: 'has_confirmed' | 'confirmed_current' | 'questions_answered' | 'quotes_valid';
+  id: 'has_confirmed' | 'confirmed_current' | 'questions_answered' | 'quotes_valid' | 'agent_precheck';
   ok: boolean;
   /** Number of items that fail the check (0 when ok). */
   failing: number;

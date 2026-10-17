@@ -281,3 +281,10 @@ input:focus-visible, textarea:focus-visible { outline: none; border-color: var(-
   .save-status { display: none; }
   .drawer-body { max-height: none; }
 }
+
+/* Save failed, pre-check, crash screen */
+.dot-fail { background: var(--danger, #e5484d); }
+.precheck { margin-bottom: 12px; }
+.precheck .btn { align-self: flex-start; }
+.crash { max-width: 640px; margin: 15vh auto; padding: 24px; display: grid; gap: 12px; }
+.crash pre { white-space: pre-wrap; }

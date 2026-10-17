@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import type { Card } from '../domain/types.ts';
 import { useT } from '../i18n.ts';
 
@@ -12,7 +12,8 @@ export interface CardActions {
   answer: (id: string, answer: string) => void;
 }
 
-export function CardView({ card, selected, actions }: { card: Card; selected: boolean; actions: CardActions }) {
+// Memoized: typing in the thought box changes no card object, so unchanged cards skip rendering.
+export const CardView = memo(function CardView({ card, selected, actions }: { card: Card; selected: boolean; actions: CardActions }) {
   const { t } = useT();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(card.title);
@@ -97,4 +98,4 @@ export function CardView({ card, selected, actions }: { card: Card; selected: bo
       </div>
     </article>
   );
-}
+});

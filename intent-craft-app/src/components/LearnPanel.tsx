@@ -1,16 +1,23 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Card } from '../domain/types.ts';
 import { useT } from '../i18n.ts';
 import { relevantConcepts } from '../providers/glossary.ts';
 
-export function LearnPanel({ text, cards, onAnswer, onSelect }: {
+export function LearnPanel({ text, cards, onAnswer, onSelect, onDismiss, onPrecheck, precheck, precheckStale, canPrecheck }: {
   text: string;
   cards: Card[];
   onAnswer: (id: string, answer: string) => void;
   onSelect: (id: string) => void;
+  /** Leave the question to the agent's judgement. */
+  onDismiss: (id: string) => void;
+  onPrecheck: () => void;
+  precheck: { running: boolean; message?: string; error?: boolean };
+  precheckStale: boolean;
+  canPrecheck: boolean;
 }) {
   const { t, lang } = useT();
-  const concepts = relevantConcepts(text, new Set(cards.map((c) => c.type)));
+  const types = useMemo(() => [...new Set(cards.map((c) => c.type))].sort().join(), [cards]);
+  const concepts = useMemo(() => relevantConcepts(text, new Set(types.split(',') as Card['type'][])), [text, types]);
   const open = cards.find((c) => c.type === 'question' && c.approval !== 'rejected' && !c.answer);
   const [answer, setAnswer] = useState('');
   const [deferred, setDeferred] = useState<string | null>(null);
@@ -22,6 +29,17 @@ export function LearnPanel({ text, cards, onAnswer, onSelect }: {
         <p className="muted small">{t.learnHint}</p>
       </div>
 
+      <div className="precheck stack">
+        <button id="precheck" className="btn primary" onClick={onPrecheck} disabled={precheck.running || !canPrecheck}>
+          {precheck.running ? t.precheckRunning : t.precheck}
+        </button>
+        <p className="muted small">{t.precheckHint}</p>
+        {precheck.message && (
+          <p id="precheck-status" className={`small ${precheck.error ? 'voice-error' : 'note'}`} role="status">{precheck.message}</p>
+        )}
+        {precheckStale && !precheck.running && <p className="small note">{t.precheckStale}</p>}
+      </div>
+
       <div className="clarify" aria-labelledby="clarify-h">
         <h3 id="clarify-h" className="eyebrow">{t.clarifyTitle}</h3>
         {!open ? (
@@ -29,7 +47,7 @@ export function LearnPanel({ text, cards, onAnswer, onSelect }: {
         ) : (
           <>
             <button className="link-btn" onClick={() => onSelect(open.id)}>{open.title}</button>
-            <p className="muted small">{t.clarifyWhy}</p>
+            <p className="muted small">{open.body && !open.source ? open.body : t.clarifyWhy}</p>
             {deferred === open.id ? (
               <p className="small note">{t.notSureNote}</p>
             ) : (
@@ -47,6 +65,7 @@ export function LearnPanel({ text, cards, onAnswer, onSelect }: {
                 <div className="row">
                   <button className="btn" type="submit" disabled={!answer.trim()}>{t.answer}</button>
                   <button className="btn ghost" type="button" onClick={() => setDeferred(open.id)}>{t.notSure}</button>
+                  <button id="leave-to-agent" className="btn ghost" type="button" onClick={() => onDismiss(open.id)}>{t.leaveToAgent}</button>
                 </div>
               </form>
             )}

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import { emptyWorkspace, isWorkspace } from '../domain/logic.ts';
+import { emptyWorkspace, sanitizeWorkspace } from '../domain/logic.ts';
 import type { Workspace } from '../domain/types.ts';
 
-const KEY = 'intentcraft.workspace.v1';
+export const KEY = 'intentcraft.workspace.v1';
 const LIMIT = 100;
 
-interface History {
+export interface History {
   past: Workspace[];
   present: Workspace;
   future: Workspace[];
@@ -13,12 +13,12 @@ interface History {
   lastKey?: string;
 }
 
-type Action =
+export type Action =
   | { kind: 'commit'; fn: (ws: Workspace) => Workspace; key?: string }
   | { kind: 'undo' }
   | { kind: 'redo' };
 
-function reducer(h: History, a: Action): History {
+export function reducer(h: History, a: Action): History {
   switch (a.kind) {
     case 'commit': {
       const next = a.fn(h.present);
@@ -37,62 +37,89 @@ function reducer(h: History, a: Action): History {
 
 function parse(json: string | null): Workspace | null {
   try {
-    const raw = JSON.parse(json ?? 'null');
-    return isWorkspace(raw) ? raw : null;
+    return sanitizeWorkspace(JSON.parse(json ?? 'null'));
   } catch {
-    return null; // corrupt storage: start clean rather than crash
+    return null;
   }
 }
 
-const load = (): Workspace => parse(localStorage.getItem(KEY)) ?? emptyWorkspace();
+/** Read the saved workspace. Damaged data is copied aside before anything is dropped, never silently lost. */
+export function load(storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage, stamp = Date.now()): Workspace {
+  let raw: string | null = null;
+  try {
+    raw = storage.getItem(KEY);
+  } catch {
+    return emptyWorkspace(); // storage blocked (private window): work in memory
+  }
+  if (raw === null) return emptyWorkspace();
+  const ws = parse(raw);
+  let stored: { cards?: unknown[]; evidence?: unknown[] } | null = null;
+  try {
+    stored = JSON.parse(raw);
+  } catch {
+    /* not JSON at all */
+  }
+  const dropped = !ws || ws.cards.length !== stored?.cards?.length || ws.evidence.length !== stored?.evidence?.length;
+  if (dropped) {
+    try {
+      storage.setItem(`${KEY}.damaged-${stamp}`, raw);
+    } catch {
+      /* no room for the backup: keep going with what could be read */
+    }
+  }
+  return ws ?? emptyWorkspace();
+}
 
 export function useWorkspace() {
   const [h, dispatch] = useReducer(reducer, undefined, () => ({ past: [], present: load(), future: [] }));
-  const [saving, setSaving] = useState(false);
-  const isFirst = useRef(true);
+  // What storage holds now; the header compares against it instead of guessing.
+  const [saved, setSaved] = useState<Workspace>(h.present);
+  const [saveFailed, setSaveFailed] = useState(false);
+  const savedJson = useRef<string | null>(null);
 
   useEffect(() => {
-    if (isFirst.current) {
-      isFirst.current = false;
-      return;
-    }
+    if (h.present === saved) return;
     const t = setTimeout(() => {
       try {
         const json = JSON.stringify(h.present);
-        if (localStorage.getItem(KEY) !== json) localStorage.setItem(KEY, json);
+        if (json !== savedJson.current) localStorage.setItem(KEY, json);
+        savedJson.current = json;
+        setSaveFailed(false);
       } catch {
-        /* storage full or blocked: keep working in memory */
+        setSaveFailed(true); // storage full or blocked: the header says so, the work stays in memory
       }
-      setSaving(false);
+      setSaved(h.present);
     }, 300);
     return () => clearTimeout(t);
-  }, [h.present]);
+  }, [h.present, saved]);
 
   // Another tab saved: take its version (as an undoable step) instead of overwriting it on our next save.
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
-      if (e.key !== KEY) return;
+      if (e.key !== KEY || e.newValue === savedJson.current) return;
       const ws = parse(e.newValue);
-      if (ws) dispatch({ kind: 'commit', fn: () => ws, key: 'other-tab' });
+      if (!ws) return;
+      savedJson.current = e.newValue;
+      dispatch({ kind: 'commit', fn: () => ws, key: 'other-tab' });
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
-  const commit = useCallback((fn: (ws: Workspace) => Workspace, key?: string) => {
-    setSaving(true);
-    dispatch({ kind: 'commit', fn, key });
-  }, []);
-  const undo = useCallback(() => {
-    setSaving(true);
-    dispatch({ kind: 'undo' });
-  }, []);
-  const redo = useCallback(() => {
-    setSaving(true);
-    dispatch({ kind: 'redo' });
-  }, []);
+  const commit = useCallback((fn: (ws: Workspace) => Workspace, key?: string) => dispatch({ kind: 'commit', fn, key }), []);
+  const undo = useCallback(() => dispatch({ kind: 'undo' }), []);
+  const redo = useCallback(() => dispatch({ kind: 'redo' }), []);
 
-  return { ws: h.present, commit, undo, redo, canUndo: h.past.length > 0, canRedo: h.future.length > 0, saving };
+  return {
+    ws: h.present,
+    commit,
+    undo,
+    redo,
+    canUndo: h.past.length > 0,
+    canRedo: h.future.length > 0,
+    saving: h.present !== saved,
+    saveFailed,
+  };
 }
 
 export const now = () => new Date().toISOString();

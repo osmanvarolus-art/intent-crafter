@@ -1,10 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  appendFinalTranscript,
-  processSpeechResults,
-  mapBrowserSpeechError,
-} from '../src/domain/voice.ts';
+import { appendFinalTranscript } from '../src/domain/voice.ts';
 import { confirmCard, emptyWorkspace, isDecision, mergeSuggestions } from '../src/domain/logic.ts';
 import { demoProvider } from '../src/providers/demoProvider.ts';
 
@@ -37,53 +33,6 @@ test('appendFinalTranscript: inserts at cursor position without destroying rest 
   const result = appendFinalTranscript(initial, 'brave new', 5);
   assert.equal(result.text, 'Hello brave new world!');
   assert.equal(result.nextCursor, 15);
-});
-
-test('processSpeechResults: prevents duplicate finalized chunks', () => {
-  let lastIndex = -1;
-
-  // First speech event with final index 0
-  const event1 = [
-    { index: 0, transcript: 'Hello world', isFinal: true },
-  ];
-  const r1 = processSpeechResults(event1, lastIndex);
-  assert.deepEqual(r1.newFinalChunks, ['Hello world']);
-  assert.equal(r1.nextLastFinalIndex, 0);
-  lastIndex = r1.nextLastFinalIndex;
-
-  // Duplicate event re-sending index 0
-  const event2 = [
-    { index: 0, transcript: 'Hello world', isFinal: true },
-  ];
-  const r2 = processSpeechResults(event2, lastIndex);
-  assert.deepEqual(r2.newFinalChunks, []); // No duplicates!
-  assert.equal(r2.nextLastFinalIndex, 0);
-
-  // New speech event with final index 1 and interim index 2
-  const event3 = [
-    { index: 1, transcript: 'this is live voice', isFinal: true },
-    { index: 2, transcript: 'speaking more', isFinal: false },
-  ];
-  const r3 = processSpeechResults(event3, lastIndex);
-  assert.deepEqual(r3.newFinalChunks, ['this is live voice']);
-  assert.equal(r3.interimText, 'speaking more');
-  assert.equal(r3.nextLastFinalIndex, 1);
-});
-
-test('mapBrowserSpeechError: provides clear explanations for permission denial and errors', () => {
-  const denied = mapBrowserSpeechError('not-allowed');
-  assert.equal(denied.type, 'permission_denied');
-  assert.match(denied.message, /permission was denied/i);
-
-  const capture = mapBrowserSpeechError('audio-capture');
-  assert.equal(capture.type, 'permission_denied');
-  assert.match(capture.message, /microphone was found/i);
-
-  const network = mapBrowserSpeechError('network');
-  assert.equal(network.type, 'network');
-
-  const noSpeech = mapBrowserSpeechError('no-speech');
-  assert.equal(noSpeech.type, 'no_speech');
 });
 
 test('voice-derived cards remain unconfirmed until explicit user approval', () => {

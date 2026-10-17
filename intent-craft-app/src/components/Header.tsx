@@ -3,6 +3,7 @@ import { useT } from '../i18n.ts';
 interface Props {
   live: boolean;
   saving: boolean;
+  saveFailed: boolean;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
@@ -10,7 +11,7 @@ interface Props {
   onToggleLang: () => void;
 }
 
-export function Header({ live, saving, canUndo, canRedo, onUndo, onRedo, onToggleLang }: Props) {
+export function Header({ live, saving, saveFailed, canUndo, canRedo, onUndo, onRedo, onToggleLang }: Props) {
   const { t } = useT();
   return (
     <header className="topbar">
@@ -28,8 +29,8 @@ export function Header({ live, saving, canUndo, canRedo, onUndo, onRedo, onToggl
       )}
       <div className="toolbar">
         <span className="save-status small" aria-live="polite">
-          <span className={`dot ${saving ? 'dot-busy' : 'dot-ok'}`} aria-hidden="true" />
-          {saving ? t.saving : t.saved}
+          <span className={`dot ${saveFailed ? 'dot-fail' : saving ? 'dot-busy' : 'dot-ok'}`} aria-hidden="true" />
+          {saveFailed ? t.saveFailed : saving ? t.saving : t.saved}
         </span>
         <button id="undo" className="btn ghost" onClick={onUndo} disabled={!canUndo} aria-keyshortcuts="Control+Z">
           {t.undo}
