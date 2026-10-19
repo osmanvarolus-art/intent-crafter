@@ -53,19 +53,21 @@ interface Props {
   onFinished: () => void;
   /** The main action only while nothing is written yet. */
   primary: boolean;
+  /** Language of the thought so far; unknown (empty text): the speech service detects it. */
+  speechLang?: string;
 }
 
-export function LiveVoiceControls({ onText, onFinished, primary }: Props) {
-  const { t, lang } = useT();
+export function LiveVoiceControls({ onText, onFinished, primary, speechLang }: Props) {
+  const { t } = useT();
   const [available, setAvailable] = useState<boolean | null>(null);
   const [state, setState] = useState<DictationState>('idle');
   const [pending, setPending] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  // Latest props and language, read by the long-lived session (no stale closures).
-  const latest = useRef({ onText, onFinished, lang });
+  // Latest props and spoken language, read by the long-lived session (no stale closures).
+  const latest = useRef({ onText, onFinished, speechLang });
   useLayoutEffect(() => {
-    latest.current = { onText, onFinished, lang };
+    latest.current = { onText, onFinished, speechLang };
   });
   const sessionRef = useRef<DictationSession | null>(null);
 
@@ -91,7 +93,8 @@ export function LiveVoiceControls({ onText, onFinished, primary }: Props) {
     (sessionRef.current ??= new DictationSession({
       openMic: openBrowserMic,
       transcribe: async (audio) => {
-        const res = await fetch(`/api/stt?lang=${latest.current.lang}`, { method: 'POST', body: audio });
+        // Never the interface language: an English interface must not make Whisper translate Turkish speech.
+        const res = await fetch(`/api/stt?lang=${latest.current.speechLang ?? ''}`, { method: 'POST', body: audio });
         const body = (await res.json().catch(() => ({}))) as { text?: string; error?: string };
         if (!res.ok) throw new Error(body.error ?? `speech service HTTP ${res.status}`);
         return body.text ?? '';

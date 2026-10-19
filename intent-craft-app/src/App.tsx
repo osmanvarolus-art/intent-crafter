@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { appendFinalTranscript } from './domain/voice.ts';
+import { appendFinalTranscript, textLang } from './domain/voice.ts';
 import * as rules from './domain/logic.ts';
 import { demoProvider } from './providers/demoProvider.ts';
 import { cardsFromItems, type ModelItem } from './providers/modelProvider.ts';
@@ -104,7 +104,7 @@ export default function App() {
       const res = await fetch('/api/extract', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text, lang }),
+        body: JSON.stringify({ text, lang: textLang(text) ?? lang }), // points in the language the user used
       });
       const body = (await res.json()) as { engine?: string; items?: ModelItem[]; error?: string };
       if (!res.ok || !body.items) throw new Error(body.error ?? `HTTP ${res.status}`);
@@ -144,7 +144,7 @@ export default function App() {
       const res = await fetch('/api/extract', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text: text.slice(L.processed), lang, known }),
+        body: JSON.stringify({ text: text.slice(L.processed), lang: textLang(text) ?? lang, known }),
       });
       const body = (await res.json()) as { engine?: string; items?: ModelItem[]; error?: string };
       if (!res.ok || !body.items) throw new Error(body.error ?? `HTTP ${res.status}`);
@@ -205,7 +205,7 @@ export default function App() {
       const res = await fetch('/api/precheck', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ draft, lang }),
+        body: JSON.stringify({ draft, lang: textLang(ws.sourceText) ?? lang }), // questions in the user's language
       });
       const body = (await res.json()) as { engine?: string; questions?: Array<{ q: string; why: string }>; error?: string };
       if (!res.ok || !body.questions) throw new Error(body.error ?? `HTTP ${res.status}`);

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { SourceRef } from '../domain/types.ts';
 import { useT } from '../i18n.ts';
 import { LiveVoiceControls } from './LiveVoiceControls.tsx';
+import { textLang } from '../domain/voice.ts';
 import { Icon } from './Icon.tsx';
 
 interface Props {
@@ -47,7 +48,7 @@ export function ThoughtPanel({ text, highlight, highlightValid, onChange, onVoic
         <p className="muted small">{t.stepTellHint}</p>
       </div>
 
-      <LiveVoiceControls onText={handleVoice} onFinished={onVoiceFinished} primary={!text.trim()} />
+      <LiveVoiceControls onText={handleVoice} onFinished={onVoiceFinished} primary={!text.trim()} speechLang={textLang(text)} />
 
       <label htmlFor="thought" className="sr-only">
         {t.thoughtTitle}

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFinalTranscript } from '../src/domain/voice.ts';
+import { appendFinalTranscript, textLang } from '../src/domain/voice.ts';
 import { confirmCard, emptyWorkspace, isDecision, mergeSuggestions } from '../src/domain/logic.ts';
 import { demoProvider } from '../src/providers/demoProvider.ts';
 
@@ -57,4 +57,12 @@ test('voice-derived cards remain unconfirmed until explicit user approval', () =
   assert.equal(confirmed.approval, 'confirmed');
   assert.equal(confirmed.origin, 'ai'); // Preserves AI origin
   assert.equal(isDecision(confirmed), true);
+});
+
+test('textLang: the thought decides the language, not the interface', () => {
+  assert.equal(textLang(''), undefined);
+  assert.equal(textLang('Telefonumdaki fotoğrafları her gece bilgisayara yedekleyen küçük bir program istiyorum.'), 'tr');
+  assert.equal(textLang('telefonu kabloyla mi baglayacagiz yoksa wifi ile mi'), 'tr'); // typed without Turkish letters
+  assert.equal(textLang('I want a small program that backs up the photos on my phone every night.'), 'en');
+  assert.equal(textLang('Please ask Gökhan which folder the backups should go to before we start building it.'), 'en'); // one Turkish name
 });

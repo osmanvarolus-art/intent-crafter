@@ -35,3 +35,17 @@ export function appendFinalTranscript(
   const nextCursor = cursorPos + inserted.length;
   return { text, nextCursor };
 }
+
+const TR_WORDS = new Set(['bir', 've', 'bu', 'ile', 'ama', 'gibi', 'mi', 'mı', 'mu', 'mü', 'ne', 'var', 'yok', 'da', 'de', 'ben', 'sen', 'olsun', 'istiyorum', 'icin', 'için', 'ya', 'çok', 'cok']);
+
+/**
+ * The language the user is actually speaking or writing, read from the thought itself (the interface
+ * language is not a signal: the interface stays English for everyone). Turkish letters and common
+ * Turkish words decide; empty text: unknown. ponytail: tr/en only, the two languages the app models.
+ */
+export function textLang(text: string): 'tr' | 'en' | undefined {
+  const words = text.toLowerCase().match(/\p{L}+/gu) ?? [];
+  if (!words.length) return undefined;
+  const turkish = words.filter((w) => TR_WORDS.has(w) || /[çğıöşü]/.test(w)).length;
+  return turkish / words.length >= 0.15 ? 'tr' : 'en';
+}
