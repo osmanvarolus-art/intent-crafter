@@ -27,7 +27,7 @@ export function buildExtractPrompt(thought: string, lang: 'tr' | 'en', known: st
     '- need: something the product must do',
     '- constraint: a limit it must respect, including every privacy, security and data rule (no personal data, redact tokens, data stays on the computer, offline)',
     '- option: something the user only said "maybe" or "later" about',
-    '- question: something the user asked or left undecided',
+    '- question: something the user asked or left undecided; write its "text" as a direct question to the user, ending with "?"',
     `Write "text" in ${language}: a complete, clear sentence; fix and name technical terms correctly; never cut it short.`,
     'One point per requirement: split sentences that hold two requirements, merge repeats. Keep everything the user said; add nothing they did not say.',
     '"quote" must be copied character for character from the thought (a part of one sentence is fine).',
@@ -52,8 +52,9 @@ export function parseItems(text: string): Item[] | null {
 }
 
 export async function runExtract(thought: string, lang: 'tr' | 'en', ask?: Asker, engines = ENGINES, known: string[] = []): Promise<{ engine: string; items: Item[] }> {
-  // A continuation may legitimately add nothing: an empty list is an answer then.
-  const parse = (text: string) => parseItems(text) ?? (known.length && /"items"\s*:\s*\[\s*\]/.test(text) ? [] : null);
+  // An explicit empty list is an answer ("nothing to build here yet", e.g. a greeting before the idea),
+  // not a failure: treating it as one asked every engine, the Claude CLI included, and reported the model as down.
+  const parse = (text: string) => parseItems(text) ?? (/"items"\s*:\s*\[\s*\]/.test(text) ? [] : null);
   const { engine, value } = await askChain(buildExtractPrompt(thought, lang, known), parse, ask, engines);
   return { engine, items: value };
 }
