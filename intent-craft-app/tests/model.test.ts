@@ -48,6 +48,8 @@ test('parseItems / runExtract: junk dropped, falls back to the next engine', asy
   assert.deepEqual(tried, ['a', 'b']);
   assert.equal(r.engine, 'b');
   assert.match(buildExtractPrompt('X', 'tr'), /privacy, security[\s\S]*in Turkish[\s\S]*X$/);
+  // An open point is shown as a question to answer: a statement ("it is undecided whether...") reads oddly and hides repeats.
+  assert.match(buildExtractPrompt('X', 'tr'), /question: [^\n]*direct question[^\n]*ending with "\?"/);
 });
 
 test('rules: privacy and "must not" requests are constraints', () => {

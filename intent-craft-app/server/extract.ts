@@ -27,7 +27,7 @@ export function buildExtractPrompt(thought: string, lang: 'tr' | 'en', known: st
     '- need: something the product must do',
     '- constraint: a limit it must respect, including every privacy, security and data rule (no personal data, redact tokens, data stays on the computer, offline)',
     '- option: something the user only said "maybe" or "later" about',
-    '- question: something the user asked or left undecided',
+    '- question: something the user asked or left undecided; write its "text" as a direct question to the user, ending with "?"',
     `Write "text" in ${language}: a complete, clear sentence; fix and name technical terms correctly; never cut it short.`,
     'One point per requirement: split sentences that hold two requirements, merge repeats. Keep everything the user said; add nothing they did not say.',
     '"quote" must be copied character for character from the thought (a part of one sentence is fine).',
