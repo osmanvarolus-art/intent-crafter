@@ -52,8 +52,9 @@ export function parseItems(text: string): Item[] | null {
 }
 
 export async function runExtract(thought: string, lang: 'tr' | 'en', ask?: Asker, engines = ENGINES, known: string[] = []): Promise<{ engine: string; items: Item[] }> {
-  // A continuation may legitimately add nothing: an empty list is an answer then.
-  const parse = (text: string) => parseItems(text) ?? (known.length && /"items"\s*:\s*\[\s*\]/.test(text) ? [] : null);
+  // An explicit empty list is an answer ("nothing to build here yet", e.g. a greeting before the idea),
+  // not a failure: treating it as one asked every engine, the Claude CLI included, and reported the model as down.
+  const parse = (text: string) => parseItems(text) ?? (/"items"\s*:\s*\[\s*\]/.test(text) ? [] : null);
   const { engine, value } = await askChain(buildExtractPrompt(thought, lang, known), parse, ask, engines);
   return { engine, items: value };
 }

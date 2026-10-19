@@ -77,7 +77,11 @@ test('live points: a continuation sends what is captured and may add nothing; po
   assert.match(prompt, /CONTINUES[\s\S]*- Not uygulaması[\s\S]*THOUGHT:\nSonra PDF de olsun\.$/);
   const r = await runExtract('x', 'tr', async () => '{"items": []}', ['m'], ['known']);
   assert.deepEqual(r.items, []);
-  await assert.rejects(runExtract('x', 'tr', async () => '{"items": []}', ['m']), /no usable answer/); // a first pass must find something
+  // A first pass may find nothing too (a greeting): one engine answers, the next ones are not asked.
+  const asked: string[] = [];
+  const first = await runExtract('Merhaba, nasılsın?', 'tr', async (e) => (asked.push(e), '{"items": []}'), ['m', 'claude']);
+  assert.deepEqual([first.items, asked], [[], ['m']]);
+  await assert.rejects(runExtract('x', 'tr', async () => 'not json', ['m']), /no usable answer/);
 
   const text = 'Bir not uygulaması istiyorum. Çevrimdışı çalışmalı. Sonra PDF de olsun.';
   let n = 0;
