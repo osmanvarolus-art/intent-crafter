@@ -128,3 +128,9 @@ document authorises either.
   no hand-copying between tools.
 - A product with a feature the competitors do not have, priced in line with them, built mostly from parts
   that already exist and are measured.
+
+---
+
+## License and ownership
+
+Copyright (c) 2026 Osman Varol. All rights reserved. The code is public so it can be read and evaluated; it is **not** open source. See [LICENSE](LICENSE). For any other use, ask first by opening an issue.
